@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Datasets and generated outputs
+data/
+datasets/
+outputs/
+output/
+results/
+artifacts/
+cache/
+*.npz
+*.npy
+*.parquet
+
+# Model/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt
+*.joblib
+*.pkl
+*.onnx
+*.engine
+*.safetensors
+*.tflite
+*.trt
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+runtime_backup_*/
+stage3_code_backup_*/
+
+# Large archives generated locally
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
