@@ -1,168 +1,63 @@
-# GitHub workflow — V4 realtime production candidate
+# GitHub V4 update workflow — only after Nebius acceptance
 
-Use the direct ZIP on Nebius first. Push the candidate only after the H100 runtime gate, Stage-2 training, full-session realtime replay, and rolling Stage-3 verification have been reviewed.
-
-Repository target:
+Repository:
 
 ```text
 https://github.com/agnidasgupta/Pole_Line_3D_Recon
 ```
 
-Recommended validation branch:
+Target branch: `v4`. The repository already stores this implementation under top-level `v4/`.
 
-```text
-v4-realtime-production-candidate
-```
+Do **not** update the branch until the Nebius review package has been examined and the exact deployment reports `V4_PRODUCTION_ACCEPTANCE_OK`.
 
-## 1. Put the candidate under `~/dev` on the Mac
-
-```bash
-mkdir -p ~/dev
-cd ~/dev
-rm -rf Pole_Line_3D_Recon_V4_Realtime_Production_Candidate
-
-unzip \
-  ~/Downloads/Pole_Line_3D_Recon_V4_Realtime_Production_Candidate.zip
-
-cd ~/dev/Pole_Line_3D_Recon_V4_Realtime_Production_Candidate
-```
-
-Validate syntax locally:
-
-```bash
-python3 -m compileall -q .
-
-for f in *.sh; do
-  bash -n "$f" || exit 1
-done
-
-find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-```
-
-## 2. After Nebius validation, create/update the Git branch
-
-Assuming the existing canonical clone is:
-
-```text
-~/dev/Pole_Line_3D_Recon
-```
-
-run:
+On the Mac, use ordinary Git/shell commands only; no Python validation is required on the host.
 
 ```bash
 cd ~/dev/Pole_Line_3D_Recon
-
-git status
 git fetch origin
-```
-
-If the validation branch does not yet exist:
-
-```bash
-git switch -c v4-realtime-production-candidate
-```
-
-If it already exists:
-
-```bash
-git switch v4-realtime-production-candidate
+git switch v4
 git pull --ff-only
 ```
 
-Copy the accepted candidate into the repository while preserving `.git`:
+Back up the existing repository V4 directory before replacement:
 
 ```bash
-rsync -av \
-  --delete \
-  --exclude='.git/' \
-  ~/dev/Pole_Line_3D_Recon_V4_Realtime_Production_Candidate/ \
-  ~/dev/Pole_Line_3D_Recon/
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+tar -C . -czf "$HOME/Downloads/Pole_Line_3D_Recon_v4_before_${STAMP}.tar.gz" v4
 ```
 
-Run code checks again:
+Extract the accepted code bundle to a temporary directory, locate it programmatically, and synchronize only the repository `v4/` directory:
 
 ```bash
-cd ~/dev/Pole_Line_3D_Recon
-
-python3 -m compileall -q .
-for f in *.sh; do bash -n "$f" || exit 1; done
-find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+TMP=$(mktemp -d)
+unzip -q "$HOME/Downloads/Pole_Line_3D_Recon_V4_Production_Ready_Nebius_Test.zip" -d "$TMP"
+SRC=$(find "$TMP" -type f -name run_v4_production_tests_on_nebius.sh -print | head -1)
+SRC=$(dirname "$SRC")
+rsync -av --delete --exclude='__pycache__/' --exclude='*.pyc' "$SRC/" ./v4/
+rm -rf "$TMP"
 ```
 
-Review exactly what changed:
+Review before committing:
 
 ```bash
-git status
-git diff --stat
-git diff
+git status --short
+git diff --stat -- v4
+git diff -- v4
 ```
 
-Commit only after review:
+Commit the accepted production changes:
 
 ```bash
-git add .
-
-git commit -m "Add V4 realtime production candidate pipeline"
-
-git push -u origin v4-realtime-production-candidate
+git add v4
+git commit -m "Optimize V4 realtime production inference and reconstruction"
+git push origin v4
 ```
 
-## 3. Deploy the Git branch to Nebius
-
-For a new clone:
+Optionally tag the accepted deployment after confirming the pushed tree matches the reviewed version:
 
 ```bash
-cd /workspace/voxel_poleline
-
-git clone \
-  --branch v4-realtime-production-candidate \
-  git@github.com:agnidasgupta/Pole_Line_3D_Recon.git \
-  Pole_Line_3D_Recon_V4_Realtime_Production_Candidate
-
-cd Pole_Line_3D_Recon_V4_Realtime_Production_Candidate
-chmod +x *.sh *.py
+git tag -a v4.0.0-production -m "V4 production runtime accepted on Nebius H100"
+git push origin v4.0.0-production
 ```
 
-For an existing validation clone:
-
-```bash
-cd /workspace/voxel_poleline/Pole_Line_3D_Recon_V4_Realtime_Production_Candidate
-
-git fetch origin
-git switch v4-realtime-production-candidate
-git pull --ff-only
-```
-
-Then run:
-
-```bash
-./build_v4_realtime_image_on_nebius.sh
-./run_v4_realtime_preflight_on_nebius.sh
-```
-
-Continue with `NEBIUS_V4_REALTIME_RUNBOOK.md`.
-
-## 4. Promotion to `main`
-
-Do not merge the branch into `main` until all of these are accepted:
-
-```text
-Stage-1 H100 runtime equivalence gate
-Stage-1 batch-size equivalence/speed sweep
-Stage-2 local refiner metrics and thresholds
-5-slice realtime replay verification
-full-session realtime P50/P95 timing
-strict rolling Stage-3 past-only verification
-reconstruction output/audit review
-```
-
-After acceptance:
-
-```bash
-cd ~/dev/Pole_Line_3D_Recon
-
-git switch main
-git pull --ff-only
-git merge --no-ff v4-realtime-production-candidate
-git push origin main
-```
+Never use `rsync --delete` against the repository root. Scope it to `./v4/` so older versions remain untouched.

@@ -1,0 +1,85 @@
+V4 PRODUCTION TEST CODEBASE - LOCAL/CONTAINER VALIDATION REPORT
+Date: 2026-08-25
+
+Scope
+-----
+The supplied source tree was validated in a containerized Linux environment before packaging.
+This validation is intentionally separated from the required Nebius H100 acceptance test.
+No claim is made here that the optimized CUDA path has passed on the production H100/model/data;
+that is the purpose of run_v4_production_tests_on_nebius.sh.
+
+Passed source/runtime checks
+----------------------------
+PASS  python compileall for every .py source
+PASS  import of production library modules
+PASS  argparse/--help parsing for every production/training/diagnostic CLI entry point
+PASS  validate_v4_production_source_contract.py
+PASS  smoke_test_v4_realtime.py
+      - sparse component scheduling
+      - coordinate channel equivalence math
+      - GroupNorm guard / no BatchNorm
+PASS  smoke_test_v4_stage2_runtime.py
+      - learned ExtraTrees bundle load/inference
+      - pole/line/vertex output schema
+PASS  smoke_test_v4_stage3_incremental.py
+      - rolling Stage3 execution
+      - missing sequence allowed
+      - future sequence excluded
+PASS  smoke_test_v4_stage_contracts.py
+      - atomic Stage1 artifact round-trip
+      - Stage2 durable path contract
+PASS  smoke_test_v4_450ft_window.py
+      - [S-9,S]
+      - 9 sequence intervals
+      - 50 ft per interval
+      - 450 ft maximum
+      - up to 10 observed slice centers
+PASS  smoke_test_v4_discovery_and_errors.py
+      - missing geography/session errors
+      - invalid session identifiers
+      - duplicate slice source rejection
+      - NaN/out-of-grid rows handled
+      - duplicate voxel handling
+      - missing x/y/z rejection
+      - malformed artifact rejection
+      - unreadable manifest not silently overwritten
+      - relocated stage-path fallback
+PASS  smoke_test_v4_cli_error_paths.py
+      - nonexistent Stage1 input/session
+      - missing Stage1 manifest for Stage2
+      - missing Stage2 manifest for Stage3
+      - missing Stage3 inference manifest
+      - missing timing/replay files
+      - missing gate/batch JSON
+      - invalid 450-ft contract
+PASS  smoke_test_v4_nebius_discovery.sh (shell only)
+      - automatic input/output/session discovery
+      - largest valid session selection
+      - duplicate-session exclusion
+      - persistent run_context.env
+      - deployment fingerprint generation
+PASS  bash -n for every .sh file
+PASS  Mac review-download checksum logic corrected to compare digest, not remote filename
+
+Nebius/Docker execution audit
+-----------------------------
+PASS  Nebius Python execution is routed through docker run, v4_docker_run, or v4_detached_run.
+PASS  run_v4_stage2_training.sh refuses direct host execution and is container-internal.
+PASS  long Docker image build is backgrounded with persistent log/state.
+PASS  preflight is detached and writes durable PASS/FAIL markers.
+PASS  H100 acceptance is detached and writes durable PASS/FAIL markers.
+PASS  stage-specific runs are detached and durable.
+PASS  review package can be created after success or failure.
+
+Required tests that remain for Nebius H100
+------------------------------------------
+1. Docker image build with CUDA visible.
+2. Container preflight on Nebius.
+3. full_cpu vs active_cpu/full_gpu/active_gpu Stage1 + Stage2 equivalence on real slices.
+4. selected-runtime batch-size equivalence/latency sweep.
+5. independent relocated Stage1 -> Stage2 -> relocated Stage2 -> Stage3 replay on real slices.
+6. quick rolling replay verification.
+7. full auto-selected session replay verification.
+8. P50/P95 timing review and final production acceptance marker.
+
+Do not update the GitHub v4 branch with this test release until the Nebius review archive is returned and reviewed.

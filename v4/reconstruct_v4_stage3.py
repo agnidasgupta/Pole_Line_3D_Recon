@@ -99,7 +99,8 @@ def pa():
     p.add_argument("--pole_merge_radius_ft", type=float, default=4.0)
     p.add_argument("--min_pole_separation_ft", type=float, default=10.0)
     p.add_argument("--max_span_length_ft", type=float, default=450.0)
-    p.add_argument("--max_span_slices", type=int, default=9)
+    p.add_argument("--max_span_slices", type=int, default=9, help="Compatibility name: maximum 50-ft sequence intervals, not count of observed centers.")
+    p.add_argument("--max_sequence_gap", type=int, default=None, help="Explicit maximum slice-sequence gap. Production uses 9 intervals = 450 ft and therefore up to 10 observed slice centers.")
     p.add_argument("--slice_length_ft", type=float, default=50.0)
 
     # Fragment-to-fragment track stitching.
@@ -184,7 +185,17 @@ def pa():
     p.add_argument("--latest_slice", type=int, default=None)
     p.add_argument("--resume_sessions", action="store_true", help="Skip sessions with complete per-session outputs and rebuild aggregates from them.")
     p.add_argument("--disable_plots", action="store_true", help="Skip PNG rendering; recommended for incremental realtime updates. Reconstruction CSV/audit math is unchanged.")
-    return p.parse_args()
+    p.add_argument("--realtime_inmemory_cache", action="store_true", help="Use the in-process Stage-2 rolling cache when complete; otherwise fall back to durable Stage-2 artifacts.")
+    a = p.parse_args()
+    if a.max_sequence_gap is not None:
+        a.max_span_slices = int(a.max_sequence_gap)
+    a.max_sequence_gap = int(a.max_span_slices)
+    a.max_observed_slice_centers = int(a.max_sequence_gap) + 1
+    if a.max_sequence_gap <= 0 or a.slice_length_ft <= 0 or a.max_span_length_ft <= 0:
+        raise ValueError("Stage3 span/window values must be positive")
+    if abs(float(a.max_sequence_gap) * float(a.slice_length_ft) - float(a.max_span_length_ft)) > 1e-9:
+        raise ValueError("Stage3 span contract mismatch: max_sequence_gap * slice_length_ft must equal max_span_length_ft")
+    return a
 
 
 def frame(rows, columns):
@@ -246,58 +257,89 @@ def _join_distance_for_mode(a, slice_gap, mode):
     )
 
 
-def _candidate_fragment_pairs(frags, a, mode):
-    """Spatially prune fragment pairs before the expensive geometry tests.
+def _prepare_fragment_runtime_geometry(frags):
+    """Cache immutable per-fragment endpoint geometry for repeated rolling updates."""
+    for f in frags:
+        if f.get("_rt_geometry_ready"):
+            continue
+        pts = np.asarray(f["points"], float)
+        f["points"] = pts
+        if len(pts) >= 2:
+            f["_rt_endpoints"] = (pts[0], pts[-1])
+            f["_rt_tangents"] = (endpoint_outward_tangent(pts, 0), endpoint_outward_tangent(pts, 1))
+            f["_rt_z_slopes"] = (endpoint_z_slope(pts, 0), endpoint_z_slope(pts, 1))
+            f["_rt_midpoint"] = np.median(pts, axis=0)
+        elif len(pts) == 1:
+            f["_rt_endpoints"] = (pts[0], pts[0])
+            f["_rt_tangents"] = (np.array([1.0, 0.0]), np.array([1.0, 0.0]))
+            f["_rt_z_slopes"] = (0.0, 0.0)
+            f["_rt_midpoint"] = pts[0]
+        else:
+            f["_rt_endpoints"] = None
+            f["_rt_tangents"] = None
+            f["_rt_z_slopes"] = None
+            f["_rt_midpoint"] = None
+        f["_rt_geometry_fingerprint"] = hash(pts.tobytes())
+        f["_rt_geometry_ready"] = True
 
-    The previous implementation tested every fragment pair twice. Dense sessions with
-    thousands of line segments therefore became quadratic before any geometry could
-    reject them. This index is exact with respect to the endpoint-distance gate: a pair
-    is considered whenever at least one endpoint pair lies within the same distance
-    that best_fragment_join() would permit for that slice gap.
+
+def _candidate_fragment_pairs(frags, a, mode="detached_bridge"):
+    """Return endpoint-distance candidates once for the selected radius envelope.
+
+    Production calls this once with ``detached_bridge`` because that distance envelope
+    is a superset of strict joins.  Strict and bridge geometry are then evaluated over
+    the same pruned pair list, avoiding duplicate KD-tree construction/query work.
     """
     if len(frags) < 2:
         return []
+    _prepare_fragment_runtime_geometry(frags)
     by_slice = {}
     for i, f in enumerate(frags):
-        seq = int(f["slice_seq"])
-        pts = np.asarray(f["points"], float)
-        if len(pts) < 2:
+        ep = f.get("_rt_endpoints")
+        if ep is None:
             continue
-        for end_idx, q in ((0, pts[0]), (1, pts[-1])):
-            by_slice.setdefault(seq, []).append((i, end_idx, np.asarray(q, float)))
+        seq = int(f["slice_seq"])
+        by_slice.setdefault(seq, []).append((i, 0, np.asarray(ep[0], float)))
+        by_slice.setdefault(seq, []).append((i, 1, np.asarray(ep[1], float)))
     trees = {}
     for seq, rows in by_slice.items():
         xyz = np.vstack([r[2] for r in rows])
-        trees[seq] = (rows, cKDTree(xyz))
+        trees[int(seq)] = (rows, cKDTree(xyz))
+
     pairs = set()
-    for i, f in enumerate(frags):
-        seq = int(f["slice_seq"])
-        pts = np.asarray(f["points"], float)
-        if len(pts) < 2:
-            continue
-        for target_seq, (rows, tree) in trees.items():
-            gap = abs(seq - int(target_seq))
+    seqs = sorted(trees)
+    for ai, sa in enumerate(seqs):
+        rows_a, tree_a = trees[sa]
+        for sb in seqs[ai:]:
+            gap = abs(int(sb) - int(sa))
             if gap > a.max_span_slices:
-                continue
+                break
+            rows_b, tree_b = trees[sb]
             radius = _join_distance_for_mode(a, gap, mode)
-            for q in (pts[0], pts[-1]):
-                for pos in tree.query_ball_point(np.asarray(q, float), radius):
-                    j = int(rows[pos][0])
-                    if j == i:
-                        continue
-                    aidx, bidx = (i, j) if i < j else (j, i)
-                    pairs.add((aidx, bidx))
+            if sa == sb:
+                for pa, pb in tree_a.query_pairs(r=radius):
+                    i = int(rows_a[pa][0]); j = int(rows_a[pb][0])
+                    if i != j:
+                        pairs.add((i, j) if i < j else (j, i))
+            else:
+                neighborhoods = tree_a.query_ball_tree(tree_b, r=radius)
+                for pa, positions in enumerate(neighborhoods):
+                    i = int(rows_a[pa][0])
+                    for pb in positions:
+                        j = int(rows_b[pb][0])
+                        if i != j:
+                            pairs.add((i, j) if i < j else (j, i))
     return sorted(pairs)
 
-
 def _fragment_midpoint_index(frags):
+    _prepare_fragment_runtime_geometry(frags)
     mids = []
     valid_ids = []
     for i, f in enumerate(frags):
-        pts = np.asarray(f["points"], float)
-        if len(pts) == 0:
+        mid = f.get("_rt_midpoint")
+        if mid is None:
             continue
-        mids.append(np.median(pts, axis=0))
+        mids.append(np.asarray(mid, float))
         valid_ids.append(i)
     if not mids:
         return None, np.empty((0, 3)), []
@@ -429,6 +471,111 @@ def fragment_direction(points):
     return unit(p[-1, :2] - p[0, :2])
 
 
+class RealtimeStage3Cache:
+    """In-process rolling cache of immutable Stage-2 slice objects in world space.
+
+    Disk artifacts remain authoritative and independently executable.  The cache only
+    removes repeated CSV parsing/world conversion while the realtime process is alive.
+    """
+    def __init__(self):
+        self._slices = {}
+
+    def put_frames(self, record, center_xyz, poles_df, lines_df, vertices_df, world_units_to_ft=0.5):
+        gid = str(record["group_id"] if isinstance(record, dict) else record.group_id)
+        seq = int(record["slice_seq"] if isinstance(record, dict) else record.slice_seq)
+        rid = str(record["id"] if isinstance(record, dict) else record.id)
+        rel = str(record["relative_path"] if isinstance(record, dict) else record.relative_path)
+        geo = str(record["geography"] if isinstance(record, dict) else record.geography)
+        sess = str(record["session"] if isinstance(record, dict) else record.session)
+        center = np.asarray(center_xyz, float)
+        if center.shape != (3,) or not np.isfinite(center).all():
+            raise ValueError(f"Stage3 realtime cache requires finite center_xyz for {rel}")
+        conv = float(world_units_to_ft)
+        pole_rows = []
+        if poles_df is not None and not poles_df.empty:
+            for q in poles_df.itertuples(index=False):
+                b = (np.array([q.base_x, q.base_y, q.base_z], float) + center) * conv
+                t = (np.array([q.top_x, q.top_y, q.top_z], float) + center) * conv
+                pole_rows.append({
+                    "group_id":gid, "geography":geo, "session":sess,
+                    "slice_seq":seq, "relative_path":rel,
+                    "source_key":f"{rid}|{q.component_id}",
+                    "base_x_ft":b[0], "base_y_ft":b[1], "base_z_ft":b[2],
+                    "top_x_ft":t[0], "top_y_ft":t[1], "top_z_ft":t[2],
+                    "height_ft":float(q.height_ft), "radius_p90_ft":float(q.radius_p90_ft),
+                    "touches_xy_edge":q.touches_xy_edge,
+                })
+
+        frag_rows = []
+        if lines_df is not None and vertices_df is not None and not lines_df.empty and not vertices_df.empty:
+            vertex_groups = {
+                str(k): g.sort_values("vertex_index")
+                for k, g in vertices_df.groupby(vertices_df.component_id.astype(str), sort=False)
+            }
+            for q in lines_df.itertuples(index=False):
+                z = vertex_groups.get(str(q.component_id))
+                if z is None or z.empty:
+                    continue
+                local = z[["x", "y", "z"]].to_numpy(float)
+                world = (local + center) * conv
+                if len(world) >= 2:
+                    world = order_xy(world)
+                    frag_rows.append({
+                        "group_id":gid, "geography":geo, "session":sess,
+                        "slice_seq":seq, "relative_path":rel,
+                        "source_key":f"{rid}|{q.component_id}", "points":world,
+                        "direction":fragment_direction(world), "score":float(q.refiner_probability),
+                    })
+        _prepare_fragment_runtime_geometry(frag_rows)
+        self._slices[(gid, seq)] = {
+            "record": dict(record) if isinstance(record, dict) else record._asdict() if hasattr(record, "_asdict") else {
+                "id":rid, "relative_path":rel, "geography":geo, "session":sess,
+                "slice_seq":seq, "group_id":gid,
+            },
+            "center_xyz": center.copy(),
+            "center_support": {
+                "relative_path":rel, "slice_seq":seq,
+                "xy_ft":(center[:2] * conv).tolist(),
+            },
+            "poles":pole_rows,
+            "frags":frag_rows,
+        }
+
+    def evict_before(self, gid, first_seq):
+        gid = str(gid); first_seq = int(first_seq)
+        for key in list(self._slices):
+            if key[0] == gid and int(key[1]) < first_seq:
+                del self._slices[key]
+
+    def has_sequences(self, gid, seqs):
+        gid = str(gid)
+        return all((gid, int(s)) in self._slices for s in seqs)
+
+    def window(self, gid, latest_slice, max_sequence_gap):
+        gid = str(gid); latest = int(latest_slice); first = latest - int(max_sequence_gap)
+        rows = [v for (g, s), v in self._slices.items() if g == gid and first <= int(s) <= latest]
+        rows.sort(key=lambda v: int(v["record"]["slice_seq"]))
+        poles = []
+        frags = []
+        centers = []
+        for v in rows:
+            poles.extend(v["poles"])
+            frags.extend(v["frags"])
+            centers.append(v["center_support"])
+        return pd.DataFrame(poles), frags, centers
+
+
+_REALTIME_STAGE3_CACHE = RealtimeStage3Cache()
+
+
+def realtime_cache_put_stage2(record, center_xyz, poles_df, lines_df, vertices_df, world_units_to_ft=0.5, max_sequence_gap=9):
+    _REALTIME_STAGE3_CACHE.put_frames(record, center_xyz, poles_df, lines_df, vertices_df, world_units_to_ft)
+    _REALTIME_STAGE3_CACHE.evict_before(str(record["group_id"]), int(record["slice_seq"]) - int(max_sequence_gap))
+
+
+def realtime_cache_has_window(group_id, expected_sequences):
+    return _REALTIME_STAGE3_CACHE.has_sequences(str(group_id), [int(x) for x in expected_sequences])
+
 def endpoint_outward_tangent(points, end_idx):
     p = np.asarray(points, float)
     if len(p) < 2:
@@ -468,10 +615,49 @@ def max_join_distance(a, slice_gap):
     return min(a.max_span_length_ft, a.fragment_join_radius_ft + missing * a.slice_length_ft + (a.missing_slice_extra_ft if missing else 0.0))
 
 
+_JOIN_GEOMETRY_CACHE = {}
+_JOIN_GEOMETRY_CACHE_LIMIT = 250000
+
+
+def _join_signature(a, mode):
+    if mode == "detached_bridge":
+        return (
+            int(a.max_span_slices), float(a.max_span_length_ft), float(a.slice_length_ft),
+            float(a.missing_slice_extra_ft), float(a.fragment_bridge_radius_ft),
+            float(a.bridge_max_join_angle_deg), float(a.bridge_max_connector_angle_deg),
+            float(a.bridge_max_lateral_ft), float(a.bridge_max_z_extrap_error_ft),
+            float(a.max_join_vertical_ft), float(a.max_join_vertical_horizontal_ratio),
+            float(a.max_longitudinal_overlap_ft), float(a.overlap_xy_radius_ft),
+            float(a.max_overlap_vertical_ft),
+        )
+    return (
+        int(a.max_span_slices), float(a.max_span_length_ft), float(a.slice_length_ft),
+        float(a.missing_slice_extra_ft), float(a.fragment_join_radius_ft),
+        float(a.max_join_angle_deg), float(a.max_connector_angle_deg),
+        float(a.max_join_lateral_ft), float(a.max_z_extrap_error_ft),
+        float(a.max_join_vertical_ft), float(a.max_join_vertical_horizontal_ratio),
+        float(a.max_longitudinal_overlap_ft), float(a.overlap_xy_radius_ft),
+        float(a.max_overlap_vertical_ft),
+    )
+
+
 def best_fragment_join(i, j, frags, a, mode="strict"):
+    _prepare_fragment_runtime_geometry(frags)
     A, B = frags[i], frags[j]
+    cache_key = (
+        str(A.get("source_key", i)), int(A.get("_rt_geometry_fingerprint", 0)),
+        str(B.get("source_key", j)), int(B.get("_rt_geometry_fingerprint", 0)),
+        mode, _join_signature(a, mode),
+    )
+    if cache_key in _JOIN_GEOMETRY_CACHE:
+        cached = _JOIN_GEOMETRY_CACHE[cache_key]
+        if cached is None:
+            return None
+        return {"i": i, "j": j, **cached}
+
     gap = abs(int(A["slice_seq"]) - int(B["slice_seq"]))
     if gap > a.max_span_slices:
+        _JOIN_GEOMETRY_CACHE[cache_key] = None
         return None
 
     if mode == "detached_bridge":
@@ -482,8 +668,8 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
         missing = max(0, int(gap) - 1)
         allowed_distance = min(
             a.max_span_length_ft,
-            a.fragment_bridge_radius_ft + missing * a.slice_length_ft +
-            (a.missing_slice_extra_ft if missing else 0.0),
+            a.fragment_bridge_radius_ft + missing * a.slice_length_ft
+            + (a.missing_slice_extra_ft if missing else 0.0),
         )
     else:
         max_join_angle = a.max_join_angle_deg
@@ -493,13 +679,20 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
         allowed_distance = max_join_distance(a, gap)
 
     if angle_deg(A["direction"], B["direction"], absolute=True) > max_join_angle:
+        _JOIN_GEOMETRY_CACHE[cache_key] = None
         return None
 
     best = None
+    endpoints_a = A["_rt_endpoints"]
+    endpoints_b = B["_rt_endpoints"]
+    tangents_a = A["_rt_tangents"]
+    tangents_b = B["_rt_tangents"]
+    slopes_a = A["_rt_z_slopes"]
+    slopes_b = B["_rt_z_slopes"]
     for ae in (0, 1):
         for be in (0, 1):
-            pa = A["points"][0 if ae == 0 else -1]
-            pb = B["points"][0 if be == 0 else -1]
+            pa = endpoints_a[ae]
+            pb = endpoints_b[be]
             d = pb - pa
             xy = float(np.linalg.norm(d[:2]))
             dz = abs(float(d[2]))
@@ -507,20 +700,15 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
             if dist > allowed_distance:
                 continue
 
-            ta = endpoint_outward_tangent(A["points"], ae)
-            tb = endpoint_outward_tangent(B["points"], be)
+            ta = tangents_a[ae]
+            tb = tangents_b[be]
             conn = unit(d[:2], ta)
             connector_a = angle_deg(ta, conn)
             connector_b = angle_deg(tb, -conn)
-
             avg = unit(ta - tb, ta)
             normal = np.array([-avg[1], avg[0]])
             lateral = abs(float(np.dot(d[:2], normal)))
             overlap = projected_overlap_ft(A, B, avg)
-
-            # Even if two endpoints happen to be close, fragments with substantial
-            # longitudinal overlap are parallel/duplicate conductors, not sequential
-            # pieces. Joining them is a common source of triangular/zig-zag artifacts.
             if overlap > a.max_longitudinal_overlap_ft:
                 continue
 
@@ -536,10 +724,8 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
                     continue
                 if dz / max(xy, 1e-6) > a.max_join_vertical_horizontal_ratio:
                     continue
-                slope_a = endpoint_z_slope(A["points"], ae)
-                slope_b = endpoint_z_slope(B["points"], be)
-                pred_b = float(pa[2] + slope_a * xy)
-                pred_a = float(pb[2] + slope_b * xy)
+                pred_b = float(pa[2] + slopes_a[ae] * xy)
+                pred_a = float(pb[2] + slopes_b[be] * xy)
                 zerr = max(abs(float(pb[2]) - pred_b), abs(float(pa[2]) - pred_a))
                 if zerr > max_zerr:
                     continue
@@ -553,7 +739,7 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
                 + (0.20 if mode == "detached_bridge" else 0.0)
             )
             row = {
-                "i": i, "j": j, "i_end": ae, "j_end": be, "slice_gap": gap,
+                "i_end": ae, "j_end": be, "slice_gap": gap,
                 "xy_gap_ft": xy, "z_gap_ft": dz, "distance_ft": dist,
                 "lateral_ft": lateral, "connector_angle_a_deg": connector_a,
                 "connector_angle_b_deg": connector_b, "longitudinal_overlap_ft": overlap,
@@ -561,8 +747,13 @@ def best_fragment_join(i, j, frags, a, mode="strict"):
             }
             if best is None or cost < best["cost"]:
                 best = row
-    return best
 
+    if len(_JOIN_GEOMETRY_CACHE) >= _JOIN_GEOMETRY_CACHE_LIMIT:
+        _JOIN_GEOMETRY_CACHE.clear()
+    _JOIN_GEOMETRY_CACHE[cache_key] = None if best is None else dict(best)
+    if best is None:
+        return None
+    return {"i": i, "j": j, **best}
 
 class UF:
     def __init__(self, n):
@@ -585,9 +776,10 @@ def candidate_skips_intervening_fragment(c, frags, midpoint_index=None, lateral_
     lie near the candidate segment. This preserves the previous geometric rule while
     removing an O(N) scan for every proposed join.
     """
+    _prepare_fragment_runtime_geometry(frags)
     A, B = frags[c["i"]], frags[c["j"]]
-    pa = A["points"][0 if c["i_end"] == 0 else -1]
-    pb = B["points"][0 if c["j_end"] == 0 else -1]
+    pa = A["_rt_endpoints"][c["i_end"]]
+    pb = B["_rt_endpoints"][c["j_end"]]
     v = pb[:2] - pa[:2]
     L2 = float(np.dot(v, v))
     if L2 < 4.0:
@@ -608,10 +800,10 @@ def candidate_skips_intervening_fragment(c, frags, midpoint_index=None, lateral_
         if midpoint_lookup is not None and k in midpoint_lookup:
             mid = midpoint_lookup[k]
         else:
-            pts = np.asarray(frags[k]["points"], float)
-            if len(pts) == 0:
+            mid = frags[k].get("_rt_midpoint")
+            if mid is None:
                 continue
-            mid = np.median(pts, axis=0)
+            mid = np.asarray(mid, float)
         t = float(np.dot(mid[:2] - pa[:2], v) / L2)
         if not (0.05 < t < 0.95):
             continue
@@ -624,25 +816,25 @@ def candidate_skips_intervening_fragment(c, frags, midpoint_index=None, lateral_
 
 
 def select_one_to_one_joins(frags, a):
-    """Build open, non-branching conductor paths using spatially pruned candidates.
-
-    Endpoint degree remains <=1 and the fragment graph remains acyclic. The spatial
-    index changes only how candidate pairs are found; best_fragment_join() still
-    applies the full direction/lateral/Z/overlap checks.
-    """
+    """Build open, non-branching paths from one shared spatial candidate set."""
+    _prepare_fragment_runtime_geometry(frags)
     endpoint_used = set()
     uf = UF(len(frags))
     accepted = []
     midpoint_index = _fragment_midpoint_index(frags)
+    # Detached-bridge distance is the superset envelope.  Build/query endpoint KD
+    # trees once, then apply strict and bridge geometry in the original order.
+    pair_ids = _candidate_fragment_pairs(frags, a, "detached_bridge")
 
     def consume(mode):
         candidates = []
-        pair_ids = _candidate_fragment_pairs(frags, a, mode)
         for i, j in pair_ids:
             if uf.find(i) == uf.find(j):
                 continue
             c = best_fragment_join(i, j, frags, a, mode=mode)
-            if c is not None and not candidate_skips_intervening_fragment(c, frags, midpoint_index=midpoint_index):
+            if c is not None and not candidate_skips_intervening_fragment(
+                c, frags, midpoint_index=midpoint_index
+            ):
                 candidates.append(c)
         candidates.sort(key=lambda r: r["cost"])
         for c in candidates:
@@ -660,7 +852,6 @@ def select_one_to_one_joins(frags, a):
     consume("strict")
     consume("detached_bridge")
     return accepted
-
 
 def build_track_components(frags, accepted):
     adj = {i: [] for i in range(len(frags))}
@@ -1430,6 +1621,15 @@ def main():
         raise RuntimeError(f"Inference manifest missing required columns {missing_manifest}: {man_path}")
     if man.empty:
         raise RuntimeError(f"Inference manifest contains zero usable rows: {man_path}")
+    seq_numeric = pd.to_numeric(man["slice_seq"], errors="coerce")
+    if seq_numeric.isna().any():
+        bad = man.loc[seq_numeric.isna(), ["group_id","slice_seq"]].head(20).to_dict("records")
+        raise RuntimeError(f"Inference manifest contains non-numeric slice_seq values: {bad}")
+    man["slice_seq"] = seq_numeric.astype(int)
+    dup = man.duplicated(["group_id","slice_seq"], keep=False)
+    if dup.any():
+        bad = man.loc[dup, ["group_id","slice_seq","relative_path"]].head(20).to_dict("records")
+        raise RuntimeError(f"Inference manifest contains duplicate group/slice rows: {bad}")
     if a.session_filter:
         man = man[man.group_id.astype(str) == a.session_filter].copy()
     if a.latest_slice is not None:
@@ -1457,63 +1657,69 @@ def main():
 
     allp = []
     allf = []
-    for _, r in man.iterrows():
-        rel = str(r.relative_path)
-        c = centers.get(rel)
-        if c is None:
-            continue
-        conv = a.world_units_to_ft
-        center = np.array(c, float)
-        relp = Path(rel)
-        stem = relp.name[:-7] if relp.name.endswith(".csv.gz") else relp.stem
-        fallback = inf / "stage2_objects" / relp.parent
-        pfile = Path(str(r.pole_csv))
-        lfile = Path(str(r.line_csv))
-        vfile = Path(str(r.line_vertices_csv))
-        if not pfile.exists():
-            pfile = fallback / (stem + "_poles.csv")
-        if not lfile.exists():
-            lfile = fallback / (stem + "_line_segments.csv")
-        if not vfile.exists():
-            vfile = fallback / (stem + "_line_vertices.csv")
+    stage3_realtime_cache_hit = False
+    expected_sequences = [int(x) for x in pd.to_numeric(man["slice_seq"], errors="coerce").dropna().astype(int).tolist()]
+    if (
+        a.realtime_inmemory_cache and a.session_filter and a.latest_slice is not None
+        and _REALTIME_STAGE3_CACHE.has_sequences(a.session_filter, expected_sequences)
+    ):
+        cached_poles, cached_frags, _ = _REALTIME_STAGE3_CACHE.window(
+            a.session_filter, a.latest_slice, a.max_span_slices
+        )
+        allp = cached_poles.to_dict("records") if not cached_poles.empty else []
+        allf = list(cached_frags)
+        stage3_realtime_cache_hit = True
+        print(
+            f"[stage3-cache] hit group={a.session_filter} latest={a.latest_slice} "
+            f"slices={len(expected_sequences)} poles={len(allp)} frags={len(allf)}",
+            flush=True,
+        )
+    else:
+        for _, r in man.iterrows():
+            rel = str(r.relative_path)
+            c = centers.get(rel)
+            if c is None:
+                continue
+            relp = Path(rel)
+            stem = relp.name[:-7] if relp.name.endswith(".csv.gz") else relp.stem
+            fallback = inf / "stage2_objects" / relp.parent
+            pfile = Path(str(r.pole_csv))
+            lfile = Path(str(r.line_csv))
+            vfile = Path(str(r.line_vertices_csv))
+            if not pfile.exists():
+                pfile = fallback / (stem + "_poles.csv")
+            if not lfile.exists():
+                lfile = fallback / (stem + "_line_segments.csv")
+            if not vfile.exists():
+                vfile = fallback / (stem + "_line_vertices.csv")
 
-        p = read_stage2_csv(pfile, POLE_COLUMNS, "poles", object_audit)
-        if not p.empty:
-            for _, q in p.iterrows():
-                b = (np.array([q.base_x, q.base_y, q.base_z]) + center) * conv
-                t = (np.array([q.top_x, q.top_y, q.top_z]) + center) * conv
-                allp.append({
-                    "group_id": r.group_id, "geography": r.geography, "session": r.session,
-                    "slice_seq": int(r.slice_seq), "relative_path": rel,
-                    "source_key": f"{r.id}|{q.component_id}",
-                    "base_x_ft": b[0], "base_y_ft": b[1], "base_z_ft": b[2],
-                    "top_x_ft": t[0], "top_y_ft": t[1], "top_z_ft": t[2],
-                    "height_ft": float(q.height_ft), "radius_p90_ft": float(q.radius_p90_ft),
-                    "touches_xy_edge": q.touches_xy_edge,
-                })
-
-        l = read_stage2_csv(lfile, LINE_COLUMNS, "line_segments", object_audit)
-        v = read_stage2_csv(vfile, VERTEX_COLUMNS, "line_vertices", object_audit)
-        if not l.empty and not v.empty:
-            # Build the component lookup once. The old implementation rescanned
-            # the full vertex DataFrame for every line component.
-            vertex_groups = {str(k): g.sort_values("vertex_index") for k, g in v.groupby(v.component_id.astype(str), sort=False)}
-            for _, q in l.iterrows():
-                z = vertex_groups.get(str(q.component_id))
-                if z is None or z.empty:
-                    object_audit.append({"kind":"line_vertices","path":str(vfile),"reason":"component_vertices_missing","missing_columns":str(q.component_id)})
-                    continue
-                local = z[["x", "y", "z"]].to_numpy(float)
-                world = (local + center) * conv
-                if len(world) >= 2:
-                    world = order_xy(world)
-                    allf.append({
-                        "group_id": r.group_id, "geography": r.geography, "session": r.session,
-                        "slice_seq": int(r.slice_seq), "relative_path": rel,
-                        "source_key": f"{r.id}|{q.component_id}", "points": world,
-                        "direction": fragment_direction(world), "score": float(q.refiner_probability),
-                    })
-
+            p = read_stage2_csv(pfile, POLE_COLUMNS, "poles", object_audit)
+            l = read_stage2_csv(lfile, LINE_COLUMNS, "line_segments", object_audit)
+            v = read_stage2_csv(vfile, VERTEX_COLUMNS, "line_vertices", object_audit)
+            if not l.empty:
+                present = set(v.component_id.astype(str)) if not v.empty else set()
+                for cid in l.component_id.astype(str):
+                    if cid not in present:
+                        object_audit.append({
+                            "kind":"line_vertices", "path":str(vfile),
+                            "reason":"component_vertices_missing", "missing_columns":cid,
+                        })
+            record = {
+                "id":str(r.id), "relative_path":rel, "geography":str(r.geography),
+                "session":str(r.session), "slice_seq":int(r.slice_seq), "group_id":str(r.group_id),
+            }
+            _REALTIME_STAGE3_CACHE.put_frames(record, np.asarray(c, float), p, l, v, a.world_units_to_ft)
+            payload = _REALTIME_STAGE3_CACHE._slices[(str(r.group_id), int(r.slice_seq))]
+            allp.extend(payload["poles"])
+            allf.extend(payload["frags"])
+        if a.session_filter and a.latest_slice is not None:
+            _REALTIME_STAGE3_CACHE.evict_before(a.session_filter, a.latest_slice - a.max_span_slices)
+        if a.realtime_inmemory_cache:
+            print(
+                f"[stage3-cache] primed_from_disk group={a.session_filter or '<all>'} "
+                f"slices={len(expected_sequences)}",
+                flush=True,
+            )
     poles = pd.DataFrame(allp)
     group_ids = sorted(set([x["group_id"] for x in allf]) | set(poles.group_id.astype(str) if not poles.empty else []))
 
@@ -1651,11 +1857,16 @@ def main():
         global_hidden_pole_audit.extend(hidden_audit)
         pole_index = build_pole_xy_index(mp)
 
-        # Re-run span-backed completion after adding hidden poles so each supporting
-        # partial span can be carried through to the newly inferred pole.
-        t_span=time.time()
-        track_records, span_completion_audit_post = complete_span_backed_tracks(track_records, mp, frags, a)
-        span_completion_post_seconds=time.time()-t_span
+        # Re-run span-backed completion only when hidden poles were actually added.
+        # With no hidden pole the inputs are identical to the pre-pass, so a second
+        # completion pass is mathematically redundant and was a large rolling cost.
+        if not hidden_mp.empty:
+            t_span=time.time()
+            track_records, span_completion_audit_post = complete_span_backed_tracks(track_records, mp, frags, a)
+            span_completion_post_seconds=time.time()-t_span
+        else:
+            span_completion_audit_post = []
+            span_completion_post_seconds = 0.0
         print(f"[stage3-phase] {gid} span_completion_post_seconds={span_completion_post_seconds:.3f} paths={len(span_completion_audit_post)}", flush=True)
         span_completion_audit = span_completion_audit_pre + span_completion_audit_post
         for rr in span_completion_audit:
@@ -1910,10 +2121,19 @@ def main():
             "min_pole_separation_ft": a.min_pole_separation_ft,
             "max_span_length_ft": a.max_span_length_ft,
             "max_span_slices": a.max_span_slices,
+            "max_sequence_gap": a.max_sequence_gap,
+            "max_observed_slice_centers": a.max_observed_slice_centers,
+            "slice_length_ft": a.slice_length_ft,
+            "sequence_gap_times_slice_length_ft": a.max_sequence_gap * a.slice_length_ft,
             "missing_intermediate_slices_allowed": True,
             "unattached_lines_retained": True,
             "one_to_one_fragment_endpoint_matching": True,
             "spatially_indexed_fragment_candidate_search": True,
+            "shared_strict_bridge_candidate_search": True,
+            "cached_fragment_endpoint_geometry": True,
+            "cached_pair_geometry_across_realtime_updates": True,
+            "realtime_stage2_inmemory_cache_requested": bool(a.realtime_inmemory_cache),
+            "realtime_stage2_inmemory_cache_hit": bool(stage3_realtime_cache_hit),
             "spatially_indexed_intervening_fragment_guard": True,
             "spatially_indexed_span_completion": True,
             "spatially_indexed_hidden_pole_pairs": True,

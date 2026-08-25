@@ -303,9 +303,401 @@ def all_core_groups(coords: np.ndarray, grid_size=(400,400,200), core_size: int=
     return groups
 
 
+
 def _safe_cuda_sync():
     if torch.cuda.is_available():
         torch.cuda.synchronize()
+
+
+def _cuda_event_pair():
+    if not torch.cuda.is_available():
+        return None, None
+    return torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+
+
+def _event_ms(pair) -> float:
+    a, b = pair
+    if a is None or b is None:
+        return 0.0
+    return float(a.elapsed_time(b))
+
+
+def _prepare_group_gather(groups, coords: np.ndarray, core_size: int) -> None:
+    """Precompute occupied output-core offsets once per slice on CPU."""
+    c = np.asarray(coords, dtype=np.int64)
+    core_vol = int(core_size) ** 3
+    for g in groups:
+        rr = np.asarray(g["rows"], dtype=np.int64)
+        if not len(rr):
+            g["_flat_core"] = np.zeros(0, np.int64)
+            continue
+        local = c[rr] - np.asarray(g["origin"], dtype=np.int64)[None, :]
+        if np.any(local < 0) or np.any(local >= int(core_size)):
+            raise RuntimeError("V4 core assignment produced an out-of-core occupied row")
+        g["_flat_core"] = (
+            local[:, 2] * int(core_size) * int(core_size)
+            + local[:, 1] * int(core_size)
+            + local[:, 0]
+        ).astype(np.int64, copy=False)
+        if np.any(g["_flat_core"] < 0) or np.any(g["_flat_core"] >= core_vol):
+            raise RuntimeError("V4 core gather offset is outside the output core")
+
+
+def _pad_batch_numpy(built, centers, target: int):
+    """Pad only the final active-core batch to a fixed CUDA batch shape.
+
+    The added samples are exact duplicates of the last real patch and are discarded.
+    No result from a padded sample can be written into the occupied-row outputs.
+    """
+    if not built or len(built) >= int(target):
+        return built, centers
+    need = int(target) - len(built)
+    last = built[-1]
+    last_center = centers[-1]
+    built = list(built) + [last] * need
+    centers = list(centers) + [last_center] * need
+    return built, centers
+
+
+def _run_model_scores(model, xb, calibration, amp: str, fallback_state: Dict):
+    try:
+        with torch.inference_mode(), autocast_ctx(amp):
+            out = model(xb)
+    except Exception as exc:
+        if hasattr(model, "_orig_mod") and not fallback_state.get("done", False):
+            print("WARNING: compiled V4 inference failed; switching to eager:", repr(exc))
+            model = model._orig_mod
+            fallback_state["done"] = True
+            fallback_state["model"] = model
+            with torch.inference_mode(), autocast_ctx(amp):
+                out = model(xb)
+        else:
+            raise
+    ps, ls = fuse_scores(
+        out,
+        calibration["score_sem_weight"],
+        calibration["score_binary_weight"],
+        calibration["score_object_weight"],
+    )
+    sem = out["semantic"].argmax(dim=1)
+    obj = torch.sigmoid(out["objectness"].float()).squeeze(1)
+    return model, ps, ls, sem, obj
+
+
+def _predict_v4_cpu_patch_reference(
+    item: Dict,
+    model,
+    cfg: Dict,
+    calibration: Dict,
+    grid_size,
+    core_size: int,
+    batch_size: int,
+    amp: str,
+    channels_last: bool,
+    evaluate_all_cores: bool,
+    fixed_batch_shape: bool,
+):
+    """Original V4 CPU patch construction path retained as the equivalence reference."""
+    gx, gy, gz = map(int, grid_size)
+    patch = int(cfg.get("patch_size", 64))
+    pad = (patch - int(core_size)) // 2
+    sl = slice(pad, pad + int(core_size))
+    groups = all_core_groups(item["coords"], grid_size, core_size) if evaluate_all_cores else active_core_groups(item["coords"], grid_size, core_size)
+    _prepare_group_gather(groups, item["coords"], core_size)
+    n = len(item["coords"])
+    pole = np.zeros(n, np.float32)
+    line = np.zeros(n, np.float32)
+    semantic = np.zeros(n, np.uint8)
+    objectness = np.zeros(n, np.float32)
+    timing = {
+        "active_cores": len(groups),
+        "total_possible_cores": int(math.ceil(gx/core_size)*math.ceil(gy/core_size)*math.ceil(gz/core_size)),
+        "patch_build_ms": 0.0,
+        "host_batch_pack_ms": 0.0,
+        "host_pin_ms": 0.0,
+        "h2d_ms": 0.0,
+        "sparse_h2d_cuda_ms": 0.0,
+        "gpu_sparse_scatter_ms": 0.0,
+        "gpu_patch_extract_ms": 0.0,
+        "gpu_feature_assembly_ms": 0.0,
+        "gpu_model_ms": 0.0,
+        "gpu_gather_ms": 0.0,
+        "d2h_gather_ms": 0.0,
+        "cuda_sync_count": 0,
+        "gpu_volume_mode": 0,
+        "fixed_batch_shape": int(bool(fixed_batch_shape)),
+        "batches": 0,
+    }
+    use_coord = bool(int(cfg.get("use_coord_channels", cfg.get("use_coord", 1))))
+    use_dist = bool(int(cfg.get("use_dist", 1)))
+    fallback_state = {"done": False, "model": model}
+    core_vol = int(core_size) ** 3
+
+    for start in range(0, len(groups), int(batch_size)):
+        bg = groups[start:start + int(batch_size)]
+        real_count = len(bg)
+        t0 = time.perf_counter()
+        built = [build_v4_patch(item, g["center"], grid_size, patch, use_coord, use_dist) for g in bg]
+        timing["patch_build_ms"] += (time.perf_counter() - t0) * 1000.0
+        centers = [g["center"] for g in bg]
+        if fixed_batch_shape and not evaluate_all_cores:
+            built, centers = _pad_batch_numpy(built, centers, int(batch_size))
+
+        t0 = time.perf_counter()
+        host_batch = np.stack(built)
+        timing["host_batch_pack_ms"] += (time.perf_counter() - t0) * 1000.0
+
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1; t0 = time.perf_counter()
+        xb = torch.from_numpy(host_batch).to("cuda", non_blocking=True)
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1
+        timing["h2d_ms"] += (time.perf_counter() - t0) * 1000.0
+
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1; t0 = time.perf_counter()
+        if channels_last:
+            xb = xb.contiguous(memory_format=torch.channels_last_3d)
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1
+        timing["gpu_feature_assembly_ms"] += (time.perf_counter() - t0) * 1000.0
+
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1; t0 = time.perf_counter()
+        model, ps, ls, sem, obj = _run_model_scores(model, xb, calibration, amp, fallback_state)
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1
+        timing["gpu_model_ms"] += (time.perf_counter() - t0) * 1000.0
+
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1; t0 = time.perf_counter()
+        offsets = []
+        dest_rows = []
+        for bi, g in enumerate(bg[:real_count]):
+            rr = np.asarray(g["rows"], np.int64)
+            if not len(rr):
+                continue
+            offsets.append(g["_flat_core"] + bi * core_vol)
+            dest_rows.append(rr)
+        if offsets:
+            take = torch.from_numpy(np.concatenate(offsets).astype(np.int64, copy=False)).to("cuda", non_blocking=True)
+            dest = np.concatenate(dest_rows)
+            pcore = ps[:real_count, sl, sl, sl].contiguous().view(-1)
+            lcore = ls[:real_count, sl, sl, sl].contiguous().view(-1)
+            score_pair = torch.stack([pcore.index_select(0, take), lcore.index_select(0, take)], dim=1).to(torch.float32)
+            scpu = score_pair.cpu().numpy()
+            semcpu = sem[:real_count, sl, sl, sl].contiguous().view(-1).index_select(0, take).to(torch.uint8).cpu().numpy()
+            objcpu = obj[:real_count, sl, sl, sl].contiguous().view(-1).index_select(0, take).to(torch.float32).cpu().numpy()
+            pole[dest] = scpu[:, 0]
+            line[dest] = scpu[:, 1]
+            semantic[dest] = semcpu
+            objectness[dest] = objcpu
+        _safe_cuda_sync(); timing["cuda_sync_count"] += 1
+        timing["d2h_gather_ms"] += (time.perf_counter() - t0) * 1000.0
+        timing["batches"] += 1
+
+    if len(item["coords"]) and sum(len(g["rows"]) for g in groups) != len(item["coords"]):
+        raise RuntimeError("V4 core scheduling did not cover every occupied row")
+    return {"pole": pole, "line": line, "semantic": semantic, "objectness": objectness, "timing": timing}
+
+
+def _pin_numpy_tensor(array: np.ndarray, dtype=None):
+    """Copy a small NumPy array into pinned host memory when CUDA supports it."""
+    src = torch.from_numpy(array)
+    if dtype is not None:
+        src = src.to(dtype=dtype)
+    try:
+        dst = torch.empty(src.shape, dtype=src.dtype, pin_memory=True)
+        dst.copy_(src)
+        return dst, True
+    except Exception:
+        return src.contiguous(), False
+
+
+def _predict_v4_gpu_sparse_volume(
+    item: Dict,
+    model,
+    cfg: Dict,
+    calibration: Dict,
+    grid_size,
+    core_size: int,
+    batch_size: int,
+    amp: str,
+    channels_last: bool,
+    evaluate_all_cores: bool,
+    fixed_batch_shape: bool,
+):
+    """Production V4 path: one sparse H2D per slice, GPU scatter, GPU patch extraction.
+
+    This preserves the original V4 64^3 patch / 48^3 output-core math.  Unlike the
+    reference path, it never materializes dense patches on the CPU and never transfers
+    a dense patch batch over PCIe.  Fused occupied-row scores remain on the GPU across
+    all batches and are copied to the host exactly once at the end of the slice.
+    """
+    if not torch.cuda.is_available():
+        raise RuntimeError("V4 GPU sparse-volume inference requires CUDA")
+    gx, gy, gz = map(int, grid_size)
+    patch = int(cfg.get("patch_size", 64))
+    pad = (patch - int(core_size)) // 2
+    if patch < int(core_size) or (patch - int(core_size)) % 2:
+        raise ValueError("V4 patch_size-core_size must be non-negative and even")
+    sl = slice(pad, pad + int(core_size))
+    use_coord = bool(int(cfg.get("use_coord_channels", cfg.get("use_coord", 1))))
+    use_dist = bool(int(cfg.get("use_dist", 1)))
+    groups = all_core_groups(item["coords"], grid_size, core_size) if evaluate_all_cores else active_core_groups(item["coords"], grid_size, core_size)
+    _prepare_group_gather(groups, item["coords"], core_size)
+    n = len(item["coords"])
+    timing = {
+        "active_cores": len(groups),
+        "total_possible_cores": int(math.ceil(gx/core_size)*math.ceil(gy/core_size)*math.ceil(gz/core_size)),
+        "patch_build_ms": 0.0,
+        "host_batch_pack_ms": 0.0,
+        "host_pin_ms": 0.0,
+        "h2d_ms": 0.0,
+        "sparse_h2d_cuda_ms": 0.0,
+        "gpu_sparse_scatter_ms": 0.0,
+        "gpu_patch_extract_ms": 0.0,
+        "gpu_feature_assembly_ms": 0.0,
+        "gpu_model_ms": 0.0,
+        "gpu_gather_ms": 0.0,
+        "d2h_gather_ms": 0.0,
+        "cuda_sync_count": 1,
+        "gpu_volume_mode": 1,
+        "fixed_batch_shape": int(bool(fixed_batch_shape)),
+        "batches": 0,
+    }
+    if n == 0:
+        return {
+            "pole": np.zeros(0, np.float32), "line": np.zeros(0, np.float32),
+            "semantic": np.zeros(0, np.uint8), "objectness": np.zeros(0, np.float32),
+            "timing": timing,
+        }
+
+    # A full patch of zero border covers first/last output cores even when a 48-voxel
+    # core starts outside the nominal grid extent (for example x=384 in a 400 grid).
+    border = patch
+    channels = 2 if use_dist else 1
+    device = torch.device("cuda")
+    data_volume = torch.zeros(
+        (channels, gz + 2 * border, gy + 2 * border, gx + 2 * border),
+        device=device, dtype=torch.float32,
+    )
+
+    t0 = time.perf_counter()
+    coords_np = np.asarray(item["coords"], dtype=np.int64)
+    dist_np = np.asarray(item["dist_values"], dtype=np.float32)
+    coords_host, pinned_coords = _pin_numpy_tensor(coords_np, torch.int64)
+    dist_host = None
+    pinned_dist = False
+    if use_dist:
+        dist_host, pinned_dist = _pin_numpy_tensor(dist_np, torch.float32)
+    timing["host_pin_ms"] = (time.perf_counter() - t0) * 1000.0
+    timing["host_pinned"] = int(bool(pinned_coords and (pinned_dist if use_dist else True)))
+
+    h2d = _cuda_event_pair(); h2d[0].record()
+    coords_gpu = coords_host.to(device, non_blocking=bool(pinned_coords))
+    dist_gpu = dist_host.to(device, non_blocking=bool(pinned_dist)) if use_dist else None
+    h2d[1].record()
+
+    scatter = _cuda_event_pair(); scatter[0].record()
+    xx = coords_gpu[:, 0] + border
+    yy = coords_gpu[:, 1] + border
+    zz = coords_gpu[:, 2] + border
+    data_volume[0, zz, yy, xx] = 1.0
+    if use_dist:
+        data_volume[1, zz, yy, xx] = dist_gpu
+    scatter[1].record()
+
+    pole_gpu = torch.zeros(n, device=device, dtype=torch.float32)
+    line_gpu = torch.zeros(n, device=device, dtype=torch.float32)
+    semantic_gpu = torch.zeros(n, device=device, dtype=torch.uint8)
+    objectness_gpu = torch.zeros(n, device=device, dtype=torch.float32)
+    fallback_state = {"done": False, "model": model}
+    core_vol = int(core_size) ** 3
+    patch_events = []
+    feature_events = []
+    model_events = []
+    gather_events = []
+
+    for start in range(0, len(groups), int(batch_size)):
+        bg = groups[start:start + int(batch_size)]
+        real_count = len(bg)
+        if not real_count:
+            continue
+        centers = [np.asarray(g["center"], dtype=np.int64) for g in bg]
+
+        pe = _cuda_event_pair(); pe[0].record()
+        patches = []
+        for center in centers:
+            sx = int(center[0]) - patch // 2 + border
+            sy = int(center[1]) - patch // 2 + border
+            sz = int(center[2]) - patch // 2 + border
+            q = data_volume[:, sz:sz+patch, sy:sy+patch, sx:sx+patch]
+            if tuple(q.shape[-3:]) != (patch, patch, patch):
+                raise RuntimeError(f"GPU V4 patch extraction returned shape {tuple(q.shape)} for center {center.tolist()}")
+            patches.append(q)
+        xb = torch.stack(patches, dim=0)
+        padded_centers = list(centers)
+        if fixed_batch_shape and not evaluate_all_cores and real_count < int(batch_size):
+            need = int(batch_size) - real_count
+            xb = torch.cat([xb, xb[-1:].expand(need, -1, -1, -1, -1)], dim=0)
+            padded_centers.extend([centers[-1]] * need)
+        pe[1].record(); patch_events.append(pe)
+
+        fe = _cuda_event_pair(); fe[0].record()
+        xb = assemble_v4_channels_gpu(xb, padded_centers, grid_size, patch, use_coord, use_dist) if use_coord else xb
+        if channels_last:
+            xb = xb.contiguous(memory_format=torch.channels_last_3d)
+        fe[1].record(); feature_events.append(fe)
+
+        me = _cuda_event_pair(); me[0].record()
+        model, ps, ls, sem, obj = _run_model_scores(model, xb, calibration, amp, fallback_state)
+        me[1].record(); model_events.append(me)
+
+        ge = _cuda_event_pair(); ge[0].record()
+        offsets = []
+        dest_rows = []
+        for bi, g in enumerate(bg):
+            rr = np.asarray(g["rows"], dtype=np.int64)
+            if not len(rr):
+                continue
+            offsets.append(g["_flat_core"] + bi * core_vol)
+            dest_rows.append(rr)
+        if offsets:
+            take_np = np.concatenate(offsets).astype(np.int64, copy=False)
+            dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
+            take_host, take_pinned = _pin_numpy_tensor(take_np, torch.int64)
+            dest_host, dest_pinned = _pin_numpy_tensor(dest_np, torch.int64)
+            take = take_host.to(device, non_blocking=bool(take_pinned))
+            dest = dest_host.to(device, non_blocking=bool(dest_pinned))
+            pcore = ps[:real_count, sl, sl, sl].contiguous().view(-1)
+            lcore = ls[:real_count, sl, sl, sl].contiguous().view(-1)
+            semcore = sem[:real_count, sl, sl, sl].contiguous().view(-1)
+            objcore = obj[:real_count, sl, sl, sl].contiguous().view(-1)
+            pole_gpu.index_copy_(0, dest, pcore.index_select(0, take).to(torch.float32))
+            line_gpu.index_copy_(0, dest, lcore.index_select(0, take).to(torch.float32))
+            semantic_gpu.index_copy_(0, dest, semcore.index_select(0, take).to(torch.uint8))
+            objectness_gpu.index_copy_(0, dest, objcore.index_select(0, take).to(torch.float32))
+        ge[1].record(); gather_events.append(ge)
+        timing["batches"] += 1
+
+    # One occupied-row result transfer per slice.  This is intentionally the only
+    # synchronization in the production GPU-volume path.
+    d2h_t0 = time.perf_counter()
+    score_cpu = torch.stack([pole_gpu, line_gpu, objectness_gpu], dim=1).cpu().numpy()
+    semantic_cpu = semantic_gpu.cpu().numpy()
+    torch.cuda.synchronize()
+    timing["d2h_gather_ms"] = (time.perf_counter() - d2h_t0) * 1000.0
+    timing["sparse_h2d_cuda_ms"] = _event_ms(h2d)
+    timing["h2d_ms"] = timing["sparse_h2d_cuda_ms"]
+    timing["gpu_sparse_scatter_ms"] = _event_ms(scatter)
+    timing["gpu_patch_extract_ms"] = float(sum(_event_ms(x) for x in patch_events))
+    timing["gpu_feature_assembly_ms"] = float(sum(_event_ms(x) for x in feature_events))
+    timing["gpu_model_ms"] = float(sum(_event_ms(x) for x in model_events))
+    timing["gpu_gather_ms"] = float(sum(_event_ms(x) for x in gather_events))
+
+    if sum(len(g["rows"]) for g in groups) != n:
+        raise RuntimeError("V4 GPU core scheduling did not cover every occupied row")
+    return {
+        "pole": score_cpu[:, 0].astype(np.float32, copy=False),
+        "line": score_cpu[:, 1].astype(np.float32, copy=False),
+        "semantic": semantic_cpu.astype(np.uint8, copy=False),
+        "objectness": score_cpu[:, 2].astype(np.float32, copy=False),
+        "timing": timing,
+    }
 
 
 def predict_v4_sparse_rows(
@@ -321,113 +713,29 @@ def predict_v4_sparse_rows(
     return_timing: bool = True,
     evaluate_all_cores: bool = True,
     gpu_coord_channels: bool = False,
+    fixed_batch_shape: bool = False,
 ):
-    """Predict V4 pole/line scores only at occupied input rows.
+    """Predict V4 scores at occupied rows with a gated reference/production path.
 
-    The network still executes the original 64^3 V4 patch math. Empty output cores
-    are skipped, and only occupied positions are gathered before D2H transfer.
+    ``gpu_coord_channels=False`` retains the original CPU patch implementation and is
+    the numerical reference. ``gpu_coord_channels=True`` uses the production sparse-
+    volume implementation: one sparse H2D transfer, GPU scatter/patch extraction,
+    GPU coordinate channels, and one occupied-score D2H transfer.
     """
-    gx, gy, gz = map(int, grid_size)
     patch = int(cfg.get("patch_size", 64))
-    if patch < core_size or (patch - core_size) % 2:
+    if patch < int(core_size) or (patch - int(core_size)) % 2:
         raise ValueError("V4 patch_size-core_size must be non-negative and even")
-    pad = (patch - int(core_size)) // 2
-    sl = slice(pad, pad + int(core_size))
-    groups = all_core_groups(item["coords"], grid_size, core_size) if evaluate_all_cores else active_core_groups(item["coords"], grid_size, core_size)
-    n = len(item["coords"])
-    pole = np.zeros(n, np.float32)
-    line = np.zeros(n, np.float32)
-    semantic = np.zeros(n, np.uint8)
-    objectness = np.zeros(n, np.float32)
-    timing = {
-        "active_cores": len(groups), "total_possible_cores": int(math.ceil(gx/core_size)*math.ceil(gy/core_size)*math.ceil(gz/core_size)),
-        "patch_build_ms": 0.0, "h2d_ms": 0.0, "gpu_feature_assembly_ms": 0.0, "gpu_model_ms": 0.0, "d2h_gather_ms": 0.0,
-        "batches": 0,
-    }
-    use_coord = bool(int(cfg.get("use_coord_channels", cfg.get("use_coord", 1))))
-    use_dist = bool(int(cfg.get("use_dist", 1)))
-    fallback_done = False
-
-    for start in range(0, len(groups), int(batch_size)):
-        bg = groups[start:start + int(batch_size)]
-        t0 = time.perf_counter()
-        if gpu_coord_channels and use_coord:
-            built = [build_v4_data_patch(item, g["center"], patch, use_dist) for g in bg]
-        else:
-            built = [build_v4_patch(item, g["center"], grid_size, patch, use_coord, use_dist) for g in bg]
-        timing["patch_build_ms"] += (time.perf_counter() - t0) * 1000.0
-
-        _safe_cuda_sync(); t0 = time.perf_counter()
-        xb = torch.from_numpy(np.stack(built)).to("cuda", non_blocking=True)
-        _safe_cuda_sync(); timing["h2d_ms"] += (time.perf_counter() - t0) * 1000.0
-
-        _safe_cuda_sync(); t0 = time.perf_counter()
-        if gpu_coord_channels and use_coord:
-            xb = assemble_v4_channels_gpu(xb,[g["center"] for g in bg],grid_size,patch,use_coord,use_dist)
-        if channels_last:
-            xb = xb.contiguous(memory_format=torch.channels_last_3d)
-        _safe_cuda_sync(); timing["gpu_feature_assembly_ms"] += (time.perf_counter() - t0) * 1000.0
-
-        _safe_cuda_sync(); t0 = time.perf_counter()
-        try:
-            with torch.inference_mode(), autocast_ctx(amp):
-                out = model(xb)
-        except Exception as exc:
-            if hasattr(model, "_orig_mod") and not fallback_done:
-                print("WARNING: compiled V4 inference failed; switching to eager:", repr(exc))
-                model = model._orig_mod
-                fallback_done = True
-                with torch.inference_mode(), autocast_ctx(amp):
-                    out = model(xb)
-            else:
-                raise
-        ps, ls = fuse_scores(
-            out,
-            calibration["score_sem_weight"],
-            calibration["score_binary_weight"],
-            calibration["score_object_weight"],
+    if int(batch_size) <= 0:
+        raise ValueError("batch_size must be positive")
+    if gpu_coord_channels:
+        return _predict_v4_gpu_sparse_volume(
+            item, model, cfg, calibration, grid_size, int(core_size), int(batch_size), amp,
+            bool(channels_last), bool(evaluate_all_cores), bool(fixed_batch_shape),
         )
-        sem = out["semantic"].argmax(dim=1)
-        obj = torch.sigmoid(out["objectness"].float()).squeeze(1)
-        _safe_cuda_sync(); timing["gpu_model_ms"] += (time.perf_counter() - t0) * 1000.0
-
-        # Gather only occupied rows from the output cores while still on GPU.
-        _safe_cuda_sync(); t0 = time.perf_counter()
-        offsets = []
-        dest_rows = []
-        core_vol = int(core_size) ** 3
-        for bi, g in enumerate(bg):
-            rr = g["rows"]
-            local = item["coords"][rr].astype(np.int64) - g["origin"][None, :]
-            if np.any(local < 0) or np.any(local >= int(core_size)):
-                raise RuntimeError("active-core assignment produced an out-of-core row")
-            flat = local[:, 2] * int(core_size) * int(core_size) + local[:, 1] * int(core_size) + local[:, 0]
-            offsets.append(flat + bi * core_vol)
-            dest_rows.append(rr)
-        if offsets:
-            take = torch.from_numpy(np.concatenate(offsets).astype(np.int64, copy=False)).to("cuda", non_blocking=True)
-            dest = np.concatenate(dest_rows)
-            pcore = ps[:, sl, sl, sl].contiguous().view(-1)
-            lcore = ls[:, sl, sl, sl].contiguous().view(-1)
-            score_pair = torch.stack([pcore.index_select(0, take), lcore.index_select(0, take)], dim=1).to(torch.float32)
-            scpu = score_pair.cpu().numpy()
-            semcpu = sem[:, sl, sl, sl].contiguous().view(-1).index_select(0, take).to(torch.uint8).cpu().numpy()
-            objcpu = obj[:, sl, sl, sl].contiguous().view(-1).index_select(0, take).to(torch.float32).cpu().numpy()
-            pole[dest] = scpu[:, 0]
-            line[dest] = scpu[:, 1]
-            semantic[dest] = semcpu
-            objectness[dest] = objcpu
-        _safe_cuda_sync(); timing["d2h_gather_ms"] += (time.perf_counter() - t0) * 1000.0
-        timing["batches"] += 1
-
-    if len(item["coords"]) and sum(len(g["rows"]) for g in groups) != len(item["coords"]):
-        raise RuntimeError("V4 active-core scheduling did not cover every occupied row")
-    return {
-        "pole": pole, "line": line, "semantic": semantic, "objectness": objectness,
-        "timing": timing,
-    }
-
-
+    return _predict_v4_cpu_patch_reference(
+        item, model, cfg, calibration, grid_size, int(core_size), int(batch_size), amp,
+        bool(channels_last), bool(evaluate_all_cores), bool(fixed_batch_shape),
+    )
 def label_from_scores(pole: np.ndarray, line: np.ndarray, pole_threshold: float, line_threshold: float) -> np.ndarray:
     out = np.zeros(len(pole), np.int8)
     p = np.asarray(pole) >= float(pole_threshold)

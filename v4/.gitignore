@@ -60,3 +60,6 @@ stage3_code_backup_*/
 *.key
 id_rsa*
 id_ed25519*
+
+# Nebius launcher state (persistent locally on VM, never commit)
+.v4_nebius_state/

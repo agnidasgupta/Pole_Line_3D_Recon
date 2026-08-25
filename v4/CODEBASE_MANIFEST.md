@@ -1,68 +1,74 @@
-# V4 realtime production candidate — codebase manifest
+# V4 production test codebase manifest
 
-This package contains source only. It does not contain trained checkpoints, Stage-2 joblib bundles, raw LiDAR CSVs, NPZ datasets, or experiment outputs.
+## Stage 1 — independently executable
 
-## V4 Stage 1 — one slice only
+- `run_v4_stage1.py` — raw slice -> durable Stage 1 artifact/manifest.
+- `run_v4_stage1_on_nebius.sh` — detached Docker-only Nebius launcher.
+- `v4_realtime_core.py` — model/calibration, sparse input, reference and optimized GPU inference paths, fine-grained Stage 1 timings.
+- `precision_common.py`, `voxel_common.py` — accepted V4 model/scoring utilities.
+- `compare_v4_runtime_variants.py` — H100 runtime gate including downstream Stage 2 equivalence.
+- `benchmark_v4_stage1_batch_sizes.py`, `select_v4_batch_size.py` — equivalent-batch latency selection.
+- `select_v4_runtime_mode.py`, `validate_v4_runtime_gate.py` — production runtime promotion.
 
-- `v4_realtime_core.py` — V4 model loading, calibration, sparse raw-slice preparation, full/active core scheduling, local coordinate channels, CUDA-synchronized Stage-1 timing.
-- `v4_realtime_pipeline.py` — persistent Stage-1 + Stage-2 one-slice processor.
-- `voxel_common.py` — accepted V4 network classes/utilities.
-- `precision_common.py` — V4 score/calibration utilities.
-- `compare_v4_runtime_variants.py` — four-way real-data Stage-1 equivalence/speed gate.
-- `select_v4_runtime_mode.py` — conservative production selector (`active_cpu` only when safe, otherwise `full_cpu`).
-- `benchmark_v4_stage1_batch_sizes.py` — batch-size equivalence/speed sweep.
-- `run_v4_runtime_variant_gate_on_nebius.sh`
-- `run_v4_stage1_batch_sweep_on_nebius.sh`
+## Stage 2 — independently executable
 
-## V4 Stage 2 — one slice only
+- `run_v4_stage2.py` — durable Stage 1 -> poles/line segments/vertices + durable manifest.
+- `run_v4_stage2_on_nebius.sh` — detached Docker-only Nebius launcher.
+- `v4_sparse_components.py` — sparse connected components.
+- `v4_stage2_local.py`, `v4_stage2_runtime.py` — feature/refiner/parametric reconstruction.
+- `mine_v4_stage2_components.py`, `train_v4_stage2_refiners.py` — offline next-training-run utilities.
+- `run_v4_stage2_training.sh` — container-internal training body; refuses host execution.
+- `run_v4_stage2_training_on_nebius.sh` — Docker launcher for future retraining.
 
-- `v4_sparse_components.py` — exact sparse 26-neighbor component extraction.
-- `v4_stage2_local.py` — local component feature schema and target logic.
-- `v4_stage2_runtime.py` — learned local refiner inference and pole/line parameterization.
-- `mine_v4_stage2_components.py` — offline current-slice component mining for Stage-2 training.
-- `train_v4_stage2_refiners.py` — ExtraTrees pole/line refiners and threshold selection.
-- `run_v4_stage2_training.sh`
-- `run_v4_stage2_training_on_nebius.sh`
+## Stage 3 — independently executable
 
-## V4 Stage 3 — rolling past-only multi-slice reconstruction
+- `run_v4_stage3.py` — durable Stage 2 -> rolling Stage 3 snapshots.
+- `run_v4_stage3_on_nebius.sh` — detached Docker-only Nebius launcher.
+- `reconstruct_v4_stage3.py` — 9-sequence-gap / 450-ft reconstruction, cached rolling Stage 2 frames, fragment joining, span completion, hidden poles, attachments and side lines.
 
-- `reconstruct_v4_stage3.py` — deterministic pole/conductor reconstruction. With `--latest_slice S`, it reads only sequence rows `S-9 ... S` and never future rows.
-- `run_v4_realtime_session.py` — persistent realtime session runner: Stage 1 current slice -> Stage 2 current slice -> Stage 3 rolling update after every slice.
-- `run_v4_realtime_session_on_nebius.sh`
+## Realtime orchestration and durable contracts
 
-The production runner rejects all-session reconstruction and enforces 9 increments / 450 ft.
+- `run_v4_realtime_session.py` — Stage1 -> Stage2 -> Stage3 realtime path, RAM handoff plus atomic durable boundaries and recovery.
+- `run_v4_production_on_nebius.sh` — accepted-deployment production launcher.
+- `v4_realtime_pipeline.py` — persistent Stage 1/2 objects.
+- `v4_stage_contracts.py` — atomic artifact/manifest functions and stable stage paths.
 
-## Timing / validation / diagnostics
+## Nebius deployment/persistence
 
-- `run_v4_realtime_benchmark_on_nebius.sh` — clean short/full-session realtime timing replay.
-- `summarize_v4_realtime_timing.py` — P50/P95 and Stage-3 window-size timing summary.
-- `verify_v4_realtime_replay.py` — past-only/no-future Stage-3 verification and output integrity checks.
-- `verify_v4_realtime_replay_on_nebius.sh`
-- `collect_v4_realtime_diagnostics.py`
-- `validate_v4_production_source_contract.py`
-- `smoke_test_v4_realtime.py`
-- `smoke_test_v4_stage2_runtime.py`
-- `smoke_test_v4_stage3_incremental.py`
-- `run_v4_realtime_preflight_on_nebius.sh`
-- `package_v4_production_review_on_nebius.sh`
-- `package_v4_realtime_diagnostics_on_nebius.sh`
-- `download_v4_production_results_to_mac.sh`
-- `download_v4_realtime_results_to_mac.sh`
-- `profile_environment.py`
+- `v4_nebius_common.sh` — shell-only path/session/artifact discovery, fingerprints, persistent roots, Docker helpers.
+- `v4_code_fingerprint.sh` — deterministic code fingerprint.
+- `build_v4_realtime_image_on_nebius.sh`, `show_v4_build_state_on_nebius.sh`, `Dockerfile.v4_realtime`, `requirements.txt`.
+- `v4_preflight_inside_docker.sh`, `run_v4_realtime_preflight_on_nebius.sh` — detached Docker preflight with durable success/failure markers.
+- `run_v4_production_tests_on_nebius.sh` — detached acceptance launcher.
+- `v4_production_acceptance_inside_docker.sh` — complete H100 acceptance sequence.
+- `show_v4_production_state_on_nebius.sh` — reconnect/status helper.
+- `package_v4_production_state_on_nebius.sh` — persistent state backup.
 
-## Environment / deployment
+## Validation and diagnostics
 
-- `Dockerfile.v4_realtime`
-- `requirements.txt`
-- `build_v4_realtime_image_on_nebius.sh`
-- `.gitignore`
+- `v4_code_validation_inside_docker.sh` — compiles/imports/parses all Python and runs synthetic tests.
+- `validate_v4_production_source_contract.py`.
+- `smoke_test_v4_realtime.py`.
+- `smoke_test_v4_stage2_runtime.py`.
+- `smoke_test_v4_stage3_incremental.py`.
+- `smoke_test_v4_stage_contracts.py`.
+- `smoke_test_v4_450ft_window.py`.
+- `smoke_test_v4_discovery_and_errors.py`.
+- `smoke_test_v4_cli_error_paths.py`.
+- `smoke_test_v4_nebius_discovery.sh` — shell-only host discovery test.
+- `verify_v4_realtime_replay.py` / `verify_v4_realtime_replay_on_nebius.sh`.
+- `summarize_v4_realtime_timing.py`.
+- `collect_v4_realtime_diagnostics.py`.
+- `package_v4_review_bundle_on_nebius.sh`.
+- `download_v4_review_bundle_to_mac.sh` plus compatibility aliases.
 
 ## Documentation
 
 - `README.md`
 - `NEBIUS_V4_REALTIME_RUNBOOK.md`
+- `PRODUCTION_ACCEPTANCE_CHECKLIST.md`
 - `GITHUB_V4_REALTIME_INSTRUCTIONS.md`
 - `V4_REALTIME_PERFORMANCE_REVIEW.md`
-- `README_STEP11_ACTIVE_CORE_CPU_COORD.md`
 - `CODEBASE_MANIFEST.md`
+- `LOCAL_VALIDATION_REPORT.txt`
 - `SHA256SUMS.txt`

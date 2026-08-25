@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+[[ -f /.dockerenv ]] || { echo 'ERROR: run_v4_stage2_training.sh is container-internal. On Nebius use run_v4_stage2_training_on_nebius.sh.' >&2; exit 2; }
 DATASET_DIR=${DATASET_DIR:-/outputs/poleline_voxel_run_session_groups/dataset_hardneg_v4opt_uncompressed}
 OUT=${OUT:-/outputs/poleline_voxel_run_session_groups/v4_realtime}
 MODEL=${MODEL:-/outputs/poleline_voxel_run_session_groups/precision_v4/train/precision_best.pt}
