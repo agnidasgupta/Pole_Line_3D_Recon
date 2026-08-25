@@ -1,0 +1,20 @@
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPYCACHEPREFIX=/tmp/pycache \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    XDG_CACHE_HOME=/tmp/xdg-cache \
+    TORCH_HOME=/tmp/torch-home \
+    TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor \
+    TRITON_CACHE_DIR=/tmp/triton \
+    CUDA_CACHE_PATH=/tmp/cuda-cache \
+    NUMBA_CACHE_DIR=/tmp/numba-cache \
+    JOBLIB_TEMP_FOLDER=/tmp/joblib \
+    TMPDIR=/tmp
+
+WORKDIR /workspace/voxel_poleline
+COPY requirements.txt /tmp/v4_requirements.txt
+RUN python -m pip install --upgrade pip && \
+    python -m pip install -r /tmp/v4_requirements.txt
