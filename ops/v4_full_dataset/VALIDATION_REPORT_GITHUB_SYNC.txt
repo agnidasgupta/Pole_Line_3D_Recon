@@ -1,0 +1,16 @@
+V4 full-dataset operations GitHub-sync validation
+Date: 2026-08-25
+
+PASS: bash -n for every shell script
+PASS: Python source compilation for every .py file
+PASS: compact-review selector synthetic archive test
+PASS: final Stage3 snapshot selection chooses numerically latest slice
+PASS: compact-review selector excludes per-voxel inference CSV.GZ in synthetic test
+
+Operational changes in this sync revision:
+- add full-dataset Stage2-only launcher
+- add full-dataset Stage3-only launcher
+- support stage1|stage2|stage3|reconstruct|all execution modes
+- preserve Stage1/Stage2 durable-boundary and deployment/input hash checks
+- fix Mac result downloader with direct-archive fallback when pointer is missing
+- add compact review packager for large full-dataset archives

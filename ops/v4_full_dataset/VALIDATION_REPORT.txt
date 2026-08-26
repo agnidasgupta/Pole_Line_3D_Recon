@@ -1,0 +1,17 @@
+V4 full-dataset operations add-on validation
+
+Validated before packaging:
+- bash -n on every supplied shell script: PASS
+- Python py_compile on every supplied Python script: PASS
+- CLI import/--help for all supplied Python entry points: PASS
+- Stage1 inference CSV.GZ exporter on synthetic Stage1 artifact: PASS
+- Stage1 3-class + pole/line binary metric calculation on synthetic labels: PASS
+- Stage2 profiled runner on synthetic pole + line Stage1 artifacts and learned ExtraTrees bundle: PASS
+- Stage3 profiled runner on synthetic multi-slice Stage2 artifacts: PASS
+- Stage3 production-contract rejection for max_sequence_gap != 9: PASS
+- Aggregate timing/metric summarizer on synthetic run tree: PASS
+- Missing Stage1 directory error: PASS
+- Missing Stage2 directory error: PASS
+- Missing session-table error: PASS
+
+Nebius production-model inference itself must run in the accepted V4 Docker image on the H100. The supplied preflight launcher re-runs Docker-only source/smoke validation before the all-data run.
