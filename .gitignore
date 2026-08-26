@@ -60,3 +60,5 @@ stage3_code_backup_*/
 *.key
 id_rsa*
 id_ed25519*
+._*
+*.pyc
