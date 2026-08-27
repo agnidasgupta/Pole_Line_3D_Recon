@@ -567,6 +567,11 @@ class RealtimeStage3Cache:
 
 _REALTIME_STAGE3_CACHE = RealtimeStage3Cache()
 
+# Experiment-only persistent Stage3 sessions.  Each session caches immutable
+# fragment candidate geometry/scores while all downstream Stage3 reconstruction
+# remains the existing batch/global implementation.
+_INCREMENTAL_STAGE3_SESSIONS = {}
+
 
 def realtime_cache_put_stage2(record, center_xyz, poles_df, lines_df, vertices_df, world_units_to_ft=0.5, max_sequence_gap=9):
     _REALTIME_STAGE3_CACHE.put_frames(record, center_xyz, poles_df, lines_df, vertices_df, world_units_to_ft)
@@ -1786,7 +1791,38 @@ def main():
 
         print(f"[stage3-start] {gid} poles_obs={len(pg)} line_segments={len(frags)} resume={a.resume_sessions}", flush=True)
         t_join=time.time()
-        accepted = select_one_to_one_joins(frags, a)
+        # Minimal incremental experiment: only fragment candidate discovery and
+        # best_fragment_join scoring persist across in-process rolling updates.
+        # Global guard checks and greedy arbitration are still rerun for the full
+        # active [S-9,S] window, preserving window-dependent topology decisions.
+        use_incremental_join = bool(
+            a.realtime_inmemory_cache
+            and a.session_filter
+            and a.latest_slice is not None
+        )
+        if use_incremental_join:
+            from stage3_incremental_runtime import Stage3Session
+            session_key = (
+                str(gid),
+                int(a.max_span_slices),
+                _join_signature(a, "strict"),
+                _join_signature(a, "detached_bridge"),
+            )
+            session = _INCREMENTAL_STAGE3_SESSIONS.get(session_key)
+            if session is None:
+                # Drop stale configurations for this group before creating the
+                # new state holder. Production v4 is unaffected; this registry
+                # exists only in the experimental branch/process.
+                for old_key in list(_INCREMENTAL_STAGE3_SESSIONS):
+                    if old_key[0] == str(gid):
+                        del _INCREMENTAL_STAGE3_SESSIONS[old_key]
+                session = Stage3Session(a, str(gid), sys.modules[__name__])
+                _INCREMENTAL_STAGE3_SESSIONS[session_key] = session
+            accepted = session.select_for_window(
+                int(a.latest_slice), frags, poles=pg
+            )
+        else:
+            accepted = select_one_to_one_joins(frags, a)
         session_join_rows=[]
         for c in accepted:
             rr={"group_id": gid, **c, "source_a": frags[c["i"]]["source_key"], "source_b": frags[c["j"]]["source_key"]}
