@@ -89,6 +89,30 @@ SKIPPED_CENTER_COLUMNS=["relative_path","reason"]
 RESUME_AUDIT_COLUMNS=["group_id","resumed","detailed_audit_complete","note"]
 
 
+V4_RECON_QUALITY_PATCH_VERSION = "v4-recon-quality-single-track-and-support-audit-v1"
+
+UNSUPPORTED_TRACK_AUDIT_COLUMNS = [
+    "group_id",
+    "track_idx",
+    "chain_type",
+    "evidence_score",
+    "slice_min",
+    "slice_max",
+    "fragment_count",
+    "nearest_start_pole_ft",
+    "nearest_end_pole_ft",
+    "start_attached_pole",
+    "end_attached_pole",
+    "start_near_pole",
+    "end_near_pole",
+    "touches_oldest_window_slice",
+    "touches_newest_window_slice",
+    "span_completion_used",
+    "classification",
+    "reason",
+    "suppressed",
+]
+
 def pa():
     p = argparse.ArgumentParser()
     p.add_argument("--inference_dir", required=True)
@@ -160,6 +184,12 @@ def pa():
     p.add_argument("--span_completion_pole_extrap_ft", type=float, default=35.0)
     p.add_argument("--span_completion_min_tracks", type=int, default=2)
     p.add_argument("--span_completion_min_coverage", type=float, default=0.15)
+    p.add_argument("--span_completion_single_track_min_coverage", type=float, default=0.30)
+
+    # Open/floating-conductor support audit. Suppression is opt-in.
+    p.add_argument("--unsupported_track_min_evidence", type=float, default=2.0)
+    p.add_argument("--unsupported_track_boundary_margin_slices", type=int, default=1)
+    p.add_argument("--suppress_unsupported_interior_tracks", action="store_true")
 
     # Hidden-pole inference. A pole is only synthesized when >=2 distinct,
     # non-parallel conductor tracks terminate toward a common point that lies
@@ -1107,13 +1137,109 @@ def _pole_end_supported(feat,pole,at_start,a):
     return attachment_height_valid(pole,endpoint[2],a)
 
 
+def classify_conductor_support(kind, tr, clean, mp, seqs, ca, cb, active_slice_min, active_slice_max, a):
+    """Classify whether a reconstructed conductor has physical/window support.
+
+    This helper is intentionally conservative. It never suppresses a supported
+    span, partial span, boundary-open track, or high-evidence interior track.
+    Suppression is possible only for a low-evidence interior OPEN_CONDUCTOR
+    whose ends have neither an accepted pole attachment nor even a pole within
+    the ordinary attachment radius.
+    """
+    clean = np.asarray(clean, float)
+    seqs = sorted(set(int(x) for x in seqs))
+
+    if len(clean) == 0:
+        nearest_start = float("inf")
+        nearest_end = float("inf")
+    elif mp is None or mp.empty:
+        nearest_start = float("inf")
+        nearest_end = float("inf")
+    else:
+        pole_xy = mp[["world_x_ft", "world_y_ft"]].to_numpy(float)
+        nearest_start = float(np.min(np.linalg.norm(pole_xy - clean[0, :2], axis=1)))
+        nearest_end = float(np.min(np.linalg.norm(pole_xy - clean[-1, :2], axis=1)))
+
+    start_attached = ca is not None
+    end_attached = cb is not None
+    start_near = nearest_start <= float(a.pole_attachment_radius_ft)
+    end_near = nearest_end <= float(a.pole_attachment_radius_ft)
+
+    margin = max(0, int(a.unsupported_track_boundary_margin_slices))
+    seq_min = min(seqs) if seqs else None
+    seq_max = max(seqs) if seqs else None
+    touches_oldest = bool(
+        seq_min is not None
+        and active_slice_min is not None
+        and seq_min <= int(active_slice_min) + margin
+    )
+    touches_newest = bool(
+        seq_max is not None
+        and active_slice_max is not None
+        and seq_max >= int(active_slice_max) - margin
+    )
+
+    evidence = float(tr.get("evidence_score", 0.0))
+    span_completion_used = bool(tr.get("span_completion_used", False))
+
+    if kind == "SPAN":
+        classification = "SUPPORTED_SPAN"
+        reason = "two_distinct_pole_attachments"
+    elif kind == "PARTIAL_SPAN":
+        classification = "PARTIAL_SPAN"
+        reason = "one_pole_attachment"
+    elif touches_oldest or touches_newest:
+        classification = "BOUNDARY_OPEN"
+        reason = "open_track_touches_rolling_window_boundary"
+    elif evidence >= float(a.unsupported_track_min_evidence):
+        classification = "INTERIOR_HIGH_EVIDENCE_OPEN"
+        reason = "interior_open_track_retained_by_evidence"
+    elif (
+        not start_attached
+        and not end_attached
+        and not start_near
+        and not end_near
+        and not span_completion_used
+    ):
+        classification = "INTERIOR_UNSUPPORTED_FLOATING"
+        reason = "low_evidence_interior_open_track_without_nearby_pole_or_span_support"
+    else:
+        classification = "INTERIOR_AMBIGUOUS_OPEN"
+        reason = "open_track_has_some_geometric_or_span_support"
+
+    suppressed = bool(
+        classification == "INTERIOR_UNSUPPORTED_FLOATING"
+        and a.suppress_unsupported_interior_tracks
+    )
+
+    return {
+        "track_idx": int(tr.get("track_idx", -1)),
+        "chain_type": str(kind),
+        "evidence_score": evidence,
+        "slice_min": seq_min,
+        "slice_max": seq_max,
+        "fragment_count": int(len(tr.get("frags", []))),
+        "nearest_start_pole_ft": nearest_start,
+        "nearest_end_pole_ft": nearest_end,
+        "start_attached_pole": bool(start_attached),
+        "end_attached_pole": bool(end_attached),
+        "start_near_pole": bool(start_near),
+        "end_near_pole": bool(end_near),
+        "touches_oldest_window_slice": touches_oldest,
+        "touches_newest_window_slice": touches_newest,
+        "span_completion_used": span_completion_used,
+        "classification": classification,
+        "reason": reason,
+        "suppressed": suppressed,
+    }
+
 def complete_span_backed_tracks(track_records,poles,frags,a):
     """Merge partial/floating tracks only when a real pole pair brackets one coherent conductor lane.
 
     The pole pair makes long missing detections reconstructable, but the path remains a DAG in
     pole-to-pole progression, so this operation cannot create loops, triangles, or zig-zag rungs.
     """
-    if a.disable_span_completion or not a.span_completion or len(track_records)<2 or len(poles)<2:
+    if a.disable_span_completion or not a.span_completion or len(track_records)<1 or len(poles)<2:
         return track_records,[]
     candidates=[]
     pole_indices=list(poles.index)
@@ -1155,7 +1281,7 @@ def complete_span_backed_tracks(track_records,poles,frags,a):
                 if float(f["s"][-1]) < -a.span_completion_pole_extrap_ft or float(f["s"][0]) > L+a.span_completion_pole_extrap_ft: continue
                 f.update({"track_idx":ti,"record":tr})
                 feats.append(f)
-            if len(feats)<a.span_completion_min_tracks: continue
+            if not feats: continue
             feats.sort(key=lambda f: float(f["s"][0]))
             N=len(feats)
             start=[_pole_end_supported(f,A,True,a) for f in feats]
@@ -1184,15 +1310,28 @@ def complete_span_backed_tracks(track_records,poles,frags,a):
                 edges.append(pr[1]); k=pr[0]
             path=path[::-1]; edges=edges[::-1]
             track_ids=[feats[i]["track_idx"] for i in path]
-            if len(track_ids)<a.span_completion_min_tracks: continue
+            single_track = len(track_ids) == 1
+            if single_track:
+                # A one-track completion is allowed only when BOTH detected poles
+                # explicitly support the two ends. This prevents a free-floating
+                # fragment from being stretched between arbitrary nearby poles.
+                if not (start[path[0]] and end[path[-1]]):
+                    continue
+            elif len(track_ids)<a.span_completion_min_tracks:
+                continue
             obs=sum(max(0.0,float(feats[i]["s"][-1]-feats[i]["s"][0])) for i in path)
             coverage=obs/max(L,1e-6)
-            if coverage<a.span_completion_min_coverage: continue
+            min_coverage = (
+                float(a.span_completion_single_track_min_coverage)
+                if single_track
+                else float(a.span_completion_min_coverage)
+            )
+            if coverage<min_coverage: continue
             seqs=[]
             for i in path:
                 seqs.extend([frags[x]["slice_seq"] for x in feats[i]["record"].get("frags",[])])
             if seqs and max(seqs)-min(seqs)>a.max_span_slices: continue
-            candidates.append({"pole_a":ia,"pole_b":ib,"track_ids":track_ids,"path":path,"feats":feats,"edges":edges,"score":dp[path[-1]],"coverage":coverage,"span_length_ft":L})
+            candidates.append({"pole_a":ia,"pole_b":ib,"track_ids":track_ids,"path":path,"feats":feats,"edges":edges,"score":dp[path[-1]],"coverage":coverage,"span_length_ft":L,"single_track":single_track})
 
     # Strongest disjoint paths first.  A single Stage-2 track cannot be borrowed by two spans.
     candidates.sort(key=lambda x:(x["score"],x["coverage"]),reverse=True)
@@ -1200,7 +1339,12 @@ def complete_span_backed_tracks(track_records,poles,frags,a):
     for c in candidates:
         if any(t in used for t in c["track_ids"]): continue
         tids=c["track_ids"]
-        if len(tids)<a.span_completion_min_tracks: continue
+        single_track = bool(c.get("single_track", len(tids) == 1))
+        if single_track:
+            if len(tids) != 1:
+                continue
+        elif len(tids)<a.span_completion_min_tracks:
+            continue
         A=poles.loc[c["pole_a"]]; B=poles.loc[c["pole_b"]]
         raw=[]; frag_ids=[]; join_ids=[]; src=[]
         for ti in tids:
@@ -1223,7 +1367,11 @@ def complete_span_backed_tracks(track_records,poles,frags,a):
             "max_bridge_gap_ft":max([e["gap_ft"] for e in c["edges"]],default=0.0),
             "max_lateral_ft":max([e["lateral_ft"] for e in c["edges"]],default=0.0),
             "max_z_error_ft":max([e["z_error_ft"] for e in c["edges"]],default=0.0),
-            "rule":"two_poles_bracket_monotonic_collinear_fragment_path",
+            "rule":(
+                "two_poles_bracket_single_supported_parametric_track"
+                if single_track
+                else "two_poles_bracket_monotonic_collinear_fragment_path"
+            ),
         })
     out=[]
     for i,tr in enumerate(track_records):
@@ -1732,6 +1880,7 @@ def main():
     global_hidden_pole_audit = []
     global_span_completion_audit = []
     global_polygon_guard_audit = []
+    global_unsupported_track_audit = []
     chain_counter = 0
     resumed_sessions = 0
     resumed_sessions_missing_detailed_audits = 0
@@ -1754,6 +1903,7 @@ def main():
                     ("inferred_hidden_poles.csv",HIDDEN_POLE_AUDIT_COLUMNS,global_hidden_pole_audit),
                     ("span_completion_paths.csv",SPAN_COMPLETION_AUDIT_COLUMNS,global_span_completion_audit),
                     ("prevented_polygon_connections.csv",POLYGON_AUDIT_COLUMNS,global_polygon_guard_audit),
+                    ("unsupported_conductor_tracks.csv",UNSUPPORTED_TRACK_AUDIT_COLUMNS,global_unsupported_track_audit),
                 ]
                 missing_detail=False
                 for name,cols,target in audit_specs:
@@ -1879,6 +2029,10 @@ def main():
         attachments = {}
         pole_graph = UF(len(mp))
         accepted_pole_pairs = set()
+        session_unsupported_track_rows = []
+        active_fragment_seqs = sorted(set(int(f["slice_seq"]) for f in frags))
+        active_slice_min = active_fragment_seqs[0] if active_fragment_seqs else None
+        active_slice_max = active_fragment_seqs[-1] if active_fragment_seqs else None
 
         for tr in track_records:
             inds = tr["frags"]
@@ -1991,6 +2145,17 @@ def main():
                 kind = "PARTIAL_SPAN"
                 p1 = mp.loc[visible[0]].world_pole_id
 
+            audit_seqs = sorted(set(frags[i]["slice_seq"] for i in inds))
+            support_row = classify_conductor_support(
+                kind, tr, clean, mp, audit_seqs, ca, cb,
+                active_slice_min, active_slice_max, a,
+            )
+            support_row = {"group_id": gid, **support_row}
+            session_unsupported_track_rows.append(support_row)
+            global_unsupported_track_audit.append(support_row)
+            if support_row["suppressed"]:
+                continue
+
             chain_counter += 1
             cid = f"{gid}/C{chain_counter:06d}"
             seqs = sorted(set(frags[i]["slice_seq"] for i in inds))
@@ -2049,6 +2214,7 @@ def main():
         atomic_csv(frame(session_join_rows, JOIN_AUDIT_COLUMNS), gdir / "accepted_fragment_joins.csv")
         atomic_csv(frame(hidden_audit, HIDDEN_POLE_AUDIT_COLUMNS), gdir / "inferred_hidden_poles.csv")
         atomic_csv(frame([{"group_id":gid,**x} if "group_id" not in x else x for x in span_completion_audit], SPAN_COMPLETION_AUDIT_COLUMNS), gdir / "span_completion_paths.csv")
+        atomic_csv(pd.DataFrame(session_unsupported_track_rows, columns=UNSUPPORTED_TRACK_AUDIT_COLUMNS), gdir / "unsupported_conductor_tracks.csv")
         session_polygon_rows=global_polygon_guard_audit[polygon_audit_start:]
         atomic_csv(frame(session_polygon_rows, POLYGON_AUDIT_COLUMNS), gdir / "prevented_polygon_connections.csv")
         if not vdf.empty or not mp.empty:
@@ -2070,6 +2236,17 @@ def main():
             "spans": int((cdf.chain_type == "SPAN").sum()) if not cdf.empty else 0,
             "partial_spans": int((cdf.chain_type == "PARTIAL_SPAN").sum()) if not cdf.empty else 0,
             "open_conductors": int((cdf.chain_type == "OPEN_CONDUCTOR").sum()) if not cdf.empty else 0,
+            "single_track_span_completions": sum(
+                1 for x in span_completion_audit
+                if x.get("rule") == "two_poles_bracket_single_supported_parametric_track"
+            ),
+            "unsupported_interior_tracks": sum(
+                1 for x in session_unsupported_track_rows
+                if x.get("classification") == "INTERIOR_UNSUPPORTED_FLOATING"
+            ),
+            "suppressed_unsupported_tracks": sum(
+                1 for x in session_unsupported_track_rows if bool(x.get("suppressed"))
+            ),
             "pole_height_adjustments": pole_adjustments,
             "detached_fragment_bridges": sum(1 for x in accepted if x.get("join_mode") == "detached_bridge"),
             "span_completion_paths": len(span_completion_audit),
@@ -2098,6 +2275,7 @@ def main():
     atomic_csv(frame(global_hidden_pole_audit, HIDDEN_POLE_AUDIT_COLUMNS), out / "inferred_hidden_poles.csv")
     atomic_csv(frame(global_span_completion_audit, SPAN_COMPLETION_AUDIT_COLUMNS), out / "span_completion_paths.csv")
     atomic_csv(frame(global_polygon_guard_audit, POLYGON_AUDIT_COLUMNS), out / "prevented_polygon_connections.csv")
+    atomic_csv(pd.DataFrame(global_unsupported_track_audit, columns=UNSUPPORTED_TRACK_AUDIT_COLUMNS), out / "unsupported_conductor_tracks.csv")
     atomic_csv(frame(resume_audit, RESUME_AUDIT_COLUMNS), out / "resume_session_audit.csv")
 
     atomic_json({
@@ -2160,6 +2338,10 @@ def main():
             "span_backed_fragment_completion": not a.disable_span_completion,
             "span_completion_min_tracks": a.span_completion_min_tracks,
             "span_completion_min_coverage": a.span_completion_min_coverage,
+            "span_completion_single_track_min_coverage": a.span_completion_single_track_min_coverage,
+            "unsupported_track_min_evidence": a.unsupported_track_min_evidence,
+            "unsupported_track_boundary_margin_slices": a.unsupported_track_boundary_margin_slices,
+            "suppress_unsupported_interior_tracks": bool(a.suppress_unsupported_interior_tracks),
             "hidden_pole_inference": not a.disable_hidden_pole_inference,
             "hidden_pole_requires_two_nonparallel_lines": True,
             "hidden_pole_requires_each_partial_span_anchored_to_existing_pole": True,
