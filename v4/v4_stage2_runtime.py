@@ -7,6 +7,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from v4_stage2_local import LOCAL_FEATURE_COLUMNS
+from v4_stage2_line_recall import recover_line_candidates_auto
 
 POLE_OUTPUT_COLUMNS = ["file_id","component_id","slice_seq","refiner_probability","touches_xy_edge","radius_p90_ft","verticality","base_x","base_y","base_z","top_x","top_y","top_z","height_ft","tilt_ft"]
 LINE_OUTPUT_COLUMNS = ["file_id","component_id","slice_seq","refiner_probability","horizontal_span_ft","vertical_span_ft","verticality","tortuosity","vertex_count"]
@@ -114,6 +115,13 @@ def apply_stage2(comps, bundle, file_id, slice_seq, voxel_size=.5):
         prob = clf.predict_proba(local_X(d, bundle["feature_columns"]))[:, 1]
         physical = _physical_mask(d, name)
         acc = (prob >= thr) & physical
+        acc, _v4_line_recall_audit = recover_line_candidates_auto(
+            local_vars=locals(),
+            line_score=prob,
+            strong_mask=acc,
+            strong_threshold=float(thr),
+            physical_mask=physical,
+        )
         d["refiner_probability"] = prob
         d["physical_ok"] = physical
         d["component_accept"] = acc
