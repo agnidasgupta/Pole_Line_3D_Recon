@@ -1,0 +1,9 @@
+[
+  {
+    "score": 4,
+    "function": "apply_stage2",
+    "line": 116,
+    "lhs": "acc",
+    "rhs": "(prob >= thr) & physical"
+  }
+]
