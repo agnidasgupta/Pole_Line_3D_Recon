@@ -34,6 +34,10 @@ from v4_realtime_core import label_from_scores, load_calibration
 from v4_realtime_pipeline import V4Stage2Processor
 from v4_sparse_components import extract_sparse_components, pca_geometry, sparse_connected_labels
 from v4_stage2_local import add_edge_features
+BUNDLE_CONSENSUS_RUNTIME_VERSION = "bundle-consensus-v7.1-fp-tolerance-20260903"
+BUNDLE_CONSENSUS_NUMERIC_TOL = 1.0e-8
+
+
 from v4_stage2_runtime import (
     LINE_OUTPUT_COLUMNS,
     POLE_OUTPUT_COLUMNS,
@@ -813,7 +817,7 @@ def _sibling_support(
             continue
         bmodel = baseline["model"]
         angle = _angle_deg(cmodel.axis_xy, bmodel.axis_xy)
-        if angle > float(profile.sibling_max_axis_angle_deg):
+        if angle > float(profile.sibling_max_axis_angle_deg) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
 
         bpoints = baseline["points"]
@@ -821,7 +825,7 @@ def _sibling_support(
         bmin, bmax = float(np.min(bs)), float(np.max(bs))
         overlap = max(0.0, min(cmax, bmax) - max(cmin, bmin))
         overlap_fraction = float(overlap / cspan)
-        if overlap_fraction < float(profile.sibling_min_longitudinal_overlap_fraction):
+        if overlap_fraction + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.sibling_min_longitudinal_overlap_fraction):
             continue
 
         # Require endpoints to be broadly coextensive, not merely a short
@@ -829,18 +833,18 @@ def _sibling_support(
         endpoint_overlap = float(overlap / max(cspan, bmax - bmin, 1e-9))
         extension_vox = max(0.0, cmin - bmin, bmin - cmin, cmax - bmax, bmax - cmax)
         endpoint_extension_ft = float(extension_vox * voxel_size_ft)
-        if endpoint_overlap < float(profile.bundle_min_endpoint_overlap_fraction):
+        if endpoint_overlap + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.bundle_min_endpoint_overlap_fraction):
             continue
-        if endpoint_extension_ft > float(profile.bundle_max_endpoint_extension_ft):
+        if endpoint_extension_ft > float(profile.bundle_max_endpoint_extension_ft) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
 
         bcenter = np.median(bpoints, axis=0)
         _, transverse, vertical = cmodel.project(bcenter.reshape(1, 3))
         cross = np.array([float(transverse[0]), float(vertical[0])], dtype=float) * float(voxel_size_ft)
         offset_ft = float(np.linalg.norm(cross))
-        if offset_ft < float(profile.sibling_min_cross_section_offset_ft):
+        if offset_ft + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.sibling_min_cross_section_offset_ft):
             continue
-        if offset_ft > float(profile.sibling_max_cross_section_offset_ft):
+        if offset_ft > float(profile.sibling_max_cross_section_offset_ft) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
 
         compatible.append({
@@ -875,7 +879,10 @@ def _sibling_support(
 
     spacing_reference = float(np.median(pairwise)) if pairwise else nearest_candidate_spacing
     spacing_ratio = float(nearest_candidate_spacing / max(spacing_reference, 1e-9))
-    if spacing_ratio < float(profile.bundle_spacing_ratio_min) or spacing_ratio > float(profile.bundle_spacing_ratio_max):
+    if (
+        spacing_ratio + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.bundle_spacing_ratio_min)
+        or spacing_ratio > float(profile.bundle_spacing_ratio_max) + BUNDLE_CONSENSUS_NUMERIC_TOL
+    ):
         return {
             "supported": False,
             "reason": "bundle_spacing_inconsistent",
