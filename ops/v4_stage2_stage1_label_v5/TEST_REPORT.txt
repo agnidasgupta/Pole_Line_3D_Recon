@@ -1,0 +1,50 @@
+V4 Stage2 deployed-Stage1-label V5 toolkit test report
+======================================================
+
+Static checks
+-------------
+- All Python files compile with Python 3.11/3.13-compatible syntax.
+- All shell scripts pass `bash -n`.
+
+Deterministic processor self-test
+---------------------------------
+- Constructed two parallel line-labelled conductor lanes.
+- Added a short vertical bridge that merges the lanes under exact 26-connectivity.
+- Persistent cross-section decomposition recovered at least two lanes.
+- Every accepted output coordinate remained a subset of deployed Stage1 line labels.
+- Changing only raw GT labels did not change runtime Stage2 output.
+- Semantic-head argmax did not override the exact deployed fused label decision.
+- An unsupported longitudinal gap was split into two runs.
+- Marker: V4_STAGE2_STAGE1_LABEL_SELF_TEST_OK
+
+One-session integration test
+----------------------------
+- Created a complete Stage1 manifest and NPZ/JSON artifact pair.
+- Loaded a joblib Stage2 bundle and calibration.
+- Ran `run_v4_stage2_stage1_label.py` end to end.
+- Produced standard inference/stage2 manifests, poles, line segments, line
+  vertices, component diagnostics, Stage1-line voxel audit, accepted voxel audit,
+  timing CSV and completion summaries.
+- Two parallel lanes were emitted from one raw 26-connected component.
+- No GT was used at runtime and no synthetic coordinate was emitted.
+- Marker: V4_STAGE2_STAGE1_LABEL_SESSION_OK
+
+Selector synthetic test
+-----------------------
+- Production baseline used a merged component rejected by a radius-sensitive
+  refiner.
+- Candidate profiles decomposed the component and recovered true Stage1 labels.
+- Selector generated profile search, baseline metrics and a selected profile.
+- Marker: SELECTED_SAFE_STAGE1_LABEL_PROFILE
+
+Real Nebius data remain the final acceptance gate. The experiment runner will
+stop and package diagnostics if no profile satisfies the target and guardrail
+criteria.
+
+Canonical orchestration simulation
+----------------------------------
+- Simulated a clean Git worktree with the production tag, one saved Stage1
+  session, selector output, one Stage2 session, status/timing files, canonical
+  `full_run_v2_<UTC>` directory creation, archive creation and SHA-256.
+- Verified the package excludes NPZ/model/joblib artifacts.
+- Marker: V4 STAGE2 STAGE1-LABEL CANONICAL RUN COMPLETE
