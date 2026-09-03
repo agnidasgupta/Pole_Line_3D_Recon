@@ -28,6 +28,8 @@ from v4_stage_contracts import load_stage1_artifact, stage1_paths
 from v4_realtime_core import load_calibration
 
 
+STAGE1_LABEL_WINDOW_FIX_VERSION = "ordinal-v2-20260903"
+
 def cli() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--stage1_root")
@@ -39,6 +41,7 @@ def cli() -> argparse.Namespace:
     p.add_argument("--precision_slice_max", type=int, default=20)
     p.add_argument("--recall_slice_min", type=int, default=21)
     p.add_argument("--recall_slice_max", type=int, default=40)
+    p.add_argument("--window_mode", choices=["ordinal", "slice_seq"], default="ordinal")
     p.add_argument("--guardrail_slices_per_session", type=int, default=2)
     p.add_argument("--top_profiles_for_guardrail", type=int, default=6)
     p.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
@@ -110,17 +113,48 @@ def resolve_artifacts(row: Any, session_dir: Path) -> tuple[Path, Path]:
     raise FileNotFoundError(f"Stage1 artifact unavailable: manifest={row.stage1_npz} fallback={fallback_npz}")
 
 
+def select_window_rows(
+    rows: pd.DataFrame,
+    slice_min: int | None,
+    slice_max: int | None,
+    window_mode: str,
+) -> pd.DataFrame:
+    """Select target-session rows without confusing session ordinals with manifest slice_seq.
+
+    The 3D review uses slice positions within a session (0, 1, 2, ...), while
+    Stage1 manifests may retain global/absolute slice_seq values.  In ordinal
+    mode we sort the completed target rows by slice_seq, assign a stable
+    session_ordinal, and apply the requested window to that ordinal.  The
+    original slice_seq is never rewritten and remains the artifact identity.
+    """
+    ordered = rows.copy()
+    ordered["slice_seq"] = pd.to_numeric(ordered["slice_seq"], errors="raise").astype(int)
+    ordered = ordered.sort_values("slice_seq", kind="stable").reset_index(drop=True)
+    ordered["session_ordinal"] = np.arange(len(ordered), dtype=np.int64)
+
+    if window_mode == "ordinal":
+        key = ordered["session_ordinal"]
+    elif window_mode == "slice_seq":
+        key = ordered["slice_seq"]
+    else:
+        raise ValueError(f"unsupported window_mode: {window_mode}")
+
+    mask = np.ones(len(ordered), dtype=bool)
+    if slice_min is not None:
+        mask &= key.to_numpy() >= int(slice_min)
+    if slice_max is not None:
+        mask &= key.to_numpy() <= int(slice_max)
+    return ordered.loc[mask].copy()
+
+
 def load_rows(
     manifest_path: Path,
     rows: pd.DataFrame,
     slice_min: int | None = None,
     slice_max: int | None = None,
+    window_mode: str = "ordinal",
 ) -> list[dict[str, Any]]:
-    selected = rows.copy()
-    if slice_min is not None:
-        selected = selected[selected["slice_seq"] >= int(slice_min)]
-    if slice_max is not None:
-        selected = selected[selected["slice_seq"] <= int(slice_max)]
+    selected = select_window_rows(rows, slice_min, slice_max, window_mode)
     out: list[dict[str, Any]] = []
     for row in selected.itertuples(index=False):
         npz, meta = resolve_artifacts(row, manifest_path.parent)
@@ -415,6 +449,8 @@ def evaluate_processor(
         )
         metrics["slice_seq"] = int(row.slice_seq)
         metrics["group_id"] = str(row.group_id)
+        if hasattr(row, "session_ordinal"):
+            metrics["session_ordinal"] = int(row.session_ordinal)
         rows.append(metrics)
     return aggregate(rows), rows
 
@@ -555,11 +591,18 @@ def self_test() -> None:
     assert len(profiles) >= 5
     assert all(profile.cross_section_eps_ft > 0 for profile in profiles)
     assert all(profile.max_internal_gap_ft >= 0 for profile in profiles)
-    print("V4_STAGE2_STAGE1_LABEL_SELECTOR_SELF_TEST_OK")
+    demo = pd.DataFrame({"slice_seq": [100, 105, 110, 115], "group_id": ["g"] * 4})
+    selected = select_window_rows(demo, 1, 2, "ordinal")
+    assert selected["slice_seq"].tolist() == [105, 110]
+    assert selected["session_ordinal"].tolist() == [1, 2]
+    selected_seq = select_window_rows(demo, 105, 110, "slice_seq")
+    assert selected_seq["slice_seq"].tolist() == [105, 110]
+    print(f"V4_STAGE2_STAGE1_LABEL_SELECTOR_SELF_TEST_OK version={STAGE1_LABEL_WINDOW_FIX_VERSION}")
 
 
 def main() -> None:
     args = cli()
+    print(f"STAGE1_LABEL_SELECTOR_VERSION={STAGE1_LABEL_WINDOW_FIX_VERSION}", flush=True)
     if args.self_test:
         self_test()
         return
@@ -577,14 +620,49 @@ def main() -> None:
     if not Path(calibration_path).is_file():
         raise FileNotFoundError(calibration_path)
     out.mkdir(parents=True, exist_ok=True)
+    (out / "SELECTOR_VERSION.txt").write_text(STAGE1_LABEL_WINDOW_FIX_VERSION + "\n")
     grid = tuple(map(int, args.grid_size))
     calibration = load_calibration(calibration_path)
 
     manifest_path, target_rows = read_session_manifest(stage1_root, args.target_session)
-    precision_cache = load_rows(manifest_path, target_rows, args.precision_slice_min, args.precision_slice_max)
-    recall_cache = load_rows(manifest_path, target_rows, args.recall_slice_min, args.recall_slice_max)
-    if not precision_cache or not recall_cache:
-        raise RuntimeError("Target precision or recall window has no Stage1 rows")
+
+    precision_rows_selected = select_window_rows(
+        target_rows, args.precision_slice_min, args.precision_slice_max, args.window_mode
+    )
+    recall_rows_selected = select_window_rows(
+        target_rows, args.recall_slice_min, args.recall_slice_max, args.window_mode
+    )
+
+    window_map_parts = []
+    if not precision_rows_selected.empty:
+        part = precision_rows_selected[["group_id", "session_ordinal", "slice_seq", "relative_path"]].copy()
+        part.insert(0, "window", "precision")
+        window_map_parts.append(part)
+    if not recall_rows_selected.empty:
+        part = recall_rows_selected[["group_id", "session_ordinal", "slice_seq", "relative_path"]].copy()
+        part.insert(0, "window", "recall")
+        window_map_parts.append(part)
+    if window_map_parts:
+        pd.concat(window_map_parts, ignore_index=True).to_csv(out / "target_window_map.csv", index=False)
+
+    if precision_rows_selected.empty or recall_rows_selected.empty:
+        ordered = select_window_rows(target_rows, None, None, "ordinal")
+        seq_min = int(ordered["slice_seq"].min()) if not ordered.empty else None
+        seq_max = int(ordered["slice_seq"].max()) if not ordered.empty else None
+        raise RuntimeError(
+            "Target precision or recall window has no Stage1 rows: "
+            f"mode={args.window_mode} target_rows={len(ordered)} "
+            f"manifest_slice_seq_range={seq_min}..{seq_max} "
+            f"precision={args.precision_slice_min}..{args.precision_slice_max} "
+            f"recall={args.recall_slice_min}..{args.recall_slice_max}"
+        )
+
+    precision_cache = load_rows(
+        manifest_path, target_rows, args.precision_slice_min, args.precision_slice_max, args.window_mode
+    )
+    recall_cache = load_rows(
+        manifest_path, target_rows, args.recall_slice_min, args.recall_slice_max, args.window_mode
+    )
     overall_cache = precision_cache + recall_cache
 
     baseline_proc = production_processor(bundle, grid, args.voxel_size_ft)
@@ -724,14 +802,17 @@ def main() -> None:
     selected_slice = pd.DataFrame(selected_precision_rows + selected_recall_rows)
     if not baseline_slice.empty and not selected_slice.empty:
         keys = ["group_id", "slice_seq"]
+        if "session_ordinal" in baseline_slice.columns and "session_ordinal" in selected_slice.columns:
+            keys.append("session_ordinal")
         comparison = baseline_slice.merge(
             selected_slice,
             on=keys,
             suffixes=("_baseline", "_selected"),
             validate="one_to_one",
         )
+        window_key = comparison["session_ordinal"] if args.window_mode == "ordinal" else comparison["slice_seq"]
         comparison["window"] = np.where(
-            comparison["slice_seq"].between(args.precision_slice_min, args.precision_slice_max),
+            window_key.between(args.precision_slice_min, args.precision_slice_max),
             "precision_control",
             "recall_recovery",
         )
@@ -756,6 +837,7 @@ def main() -> None:
         "precision_window": [args.precision_slice_min, args.precision_slice_max],
         "recall_window": [args.recall_slice_min, args.recall_slice_max],
         "stage1_label_definition": "v4_realtime_core.label_from_scores with accepted calibration thresholds",
+        "window_mode": args.window_mode,
         "runtime_gt_usage": False,
         "synthetic_line_voxels": 0,
         "baseline": baseline,
@@ -766,6 +848,7 @@ def main() -> None:
         handle.write("SELECTED_SAFE_STAGE1_LABEL_PROFILE\n")
         handle.write(f"profile={profile.name}\n")
         handle.write(f"target_session={args.target_session}\n")
+        handle.write(f"window_mode={args.window_mode}\n")
         handle.write(f"precision_window={args.precision_slice_min}-{args.precision_slice_max}\n")
         handle.write(f"recall_window={args.recall_slice_min}-{args.recall_slice_max}\n")
         for key in [

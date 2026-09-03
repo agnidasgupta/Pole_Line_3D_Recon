@@ -23,6 +23,7 @@ PRECISION_SLICE_MIN="${PRECISION_SLICE_MIN:-0}"
 PRECISION_SLICE_MAX="${PRECISION_SLICE_MAX:-20}"
 RECALL_SLICE_MIN="${RECALL_SLICE_MIN:-21}"
 RECALL_SLICE_MAX="${RECALL_SLICE_MAX:-40}"
+WINDOW_MODE="${WINDOW_MODE:-ordinal}"
 GUARDRAIL_SLICES_PER_SESSION="${GUARDRAIL_SLICES_PER_SESSION:-2}"
 RUN_SCOPE="${RUN_SCOPE:-all}"
 MAX_SLICES="${MAX_SLICES:-0}"
@@ -30,6 +31,8 @@ RESUME="${RESUME:-0}"
 WRITE_VOXEL_AUDIT="${WRITE_VOXEL_AUDIT:-1}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-0}"
 RUN_STAMP="${RUN_STAMP:-}"
+SELECTOR_VERSION_EXPECTED="ordinal-v2-20260903"
+SELECTOR_SHA256_EXPECTED="baec6ffd01e235062972f244d0e141e6b32f3d6169cc327a45f4659914da3a31"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -102,6 +105,7 @@ case "$RUN_SCOPE" in all|target) ;; *) fail "RUN_SCOPE must be all or target" ;;
 case "$RESUME" in 0|1) ;; *) fail "RESUME must be 0 or 1" ;; esac
 case "$WRITE_VOXEL_AUDIT" in 0|1) ;; *) fail "WRITE_VOXEL_AUDIT must be 0 or 1" ;; esac
 case "$PREFLIGHT_ONLY" in 0|1) ;; *) fail "PREFLIGHT_ONLY must be 0 or 1" ;; esac
+case "$WINDOW_MODE" in ordinal|slice_seq) ;; *) fail "WINDOW_MODE must be ordinal or slice_seq" ;; esac
 for value in "$PRECISION_SLICE_MIN" "$PRECISION_SLICE_MAX" "$RECALL_SLICE_MIN" "$RECALL_SLICE_MAX" "$GUARDRAIL_SLICES_PER_SESSION" "$MAX_SLICES"; do
   is_nonnegative_integer "$value" || fail "expected nonnegative integer, got: $value"
 done
@@ -120,6 +124,15 @@ done
 [ -d "$STAGE1_ROOT_HOST" ] || fail "saved Stage1 root missing: $STAGE1_ROOT_HOST"
 [ -f "$STAGE2_BUNDLE_HOST" ] || fail "accepted Stage2 bundle missing: $STAGE2_BUNDLE_HOST"
 [ -f "$CALIBRATION_HOST" ] || fail "accepted calibration missing: $CALIBRATION_HOST"
+
+SELECTOR_HOST="$TOOL_DIR/select_v4_stage2_stage1_label_profile.py"
+grep -Fq "STAGE1_LABEL_WINDOW_FIX_VERSION = \"$SELECTOR_VERSION_EXPECTED\"" "$SELECTOR_HOST" \
+  || fail "stale selector installed: expected version $SELECTOR_VERSION_EXPECTED"
+grep -Fq -- "--window_mode" "$SELECTOR_HOST" \
+  || fail "selector lacks --window_mode; stale source installed"
+SELECTOR_SHA256_ACTUAL=$(sha256sum "$SELECTOR_HOST" | awk '{print $1}')
+[ "$SELECTOR_SHA256_ACTUAL" = "$SELECTOR_SHA256_EXPECTED" ] \
+  || fail "selector SHA256 mismatch: expected=$SELECTOR_SHA256_EXPECTED actual=$SELECTOR_SHA256_ACTUAL"
 
 git -C "$EXP_REPO" rev-parse -q --verify "${PRODUCTION_TAG}^{commit}" >/dev/null \
   || fail "production tag unavailable: $PRODUCTION_TAG"
@@ -163,6 +176,14 @@ for manifest in "${ALL_MANIFESTS[@]}"; do
   fi
 done
 [ -n "$TARGET_MANIFEST" ] || fail "target session not found: $TARGET_GID"
+TARGET_COMPLETED_ROWS=$(completed_count "$TARGET_MANIFEST" "$TARGET_GID")
+if [ "$WINDOW_MODE" = "ordinal" ]; then
+  REQUIRED_ORDINAL_MAX=$PRECISION_SLICE_MAX
+  [ "$RECALL_SLICE_MAX" -le "$REQUIRED_ORDINAL_MAX" ] || REQUIRED_ORDINAL_MAX=$RECALL_SLICE_MAX
+  REQUIRED_ORDINAL_ROWS=$((REQUIRED_ORDINAL_MAX + 1))
+  [ "$TARGET_COMPLETED_ROWS" -ge "$REQUIRED_ORDINAL_ROWS" ] \
+    || fail "target session has only $TARGET_COMPLETED_ROWS completed rows; ordinal windows require $REQUIRED_ORDINAL_ROWS"
+fi
 
 # Validate exact container paths, bundle, calibration, import graph and core invariants.
 docker run --rm -i \
@@ -231,6 +252,10 @@ if [ "$PREFLIGHT_ONLY" = "1" ]; then
   echo "repository=$EXP_REPO"
   echo "commit=$COMMIT"
   echo "stage1_root=$STAGE1_ROOT_HOST"
+  echo "selector_version=$SELECTOR_VERSION_EXPECTED"
+  echo "selector_sha256=$SELECTOR_SHA256_ACTUAL"
+  echo "target_completed_rows=$TARGET_COMPLETED_ROWS"
+  echo "window_mode=$WINDOW_MODE"
   echo "stage2_bundle=$STAGE2_BUNDLE_HOST"
   echo "calibration=$CALIBRATION_HOST"
   echo "stage1_sessions=${#ALL_MANIFESTS[@]}"
@@ -268,6 +293,7 @@ stage1_rerun=false
 stage2_bundle=$STAGE2_BUNDLE_HOST
 calibration=$CALIBRATION_HOST
 target_session=$TARGET_GID
+window_mode=$WINDOW_MODE
 precision_window=$PRECISION_SLICE_MIN-$PRECISION_SLICE_MAX
 recall_window=$RECALL_SLICE_MIN-$RECALL_SLICE_MAX
 guardrail_slices_per_session=$GUARDRAIL_SLICES_PER_SESSION
@@ -303,6 +329,7 @@ docker run --rm \
     --precision_slice_max "$PRECISION_SLICE_MAX" \
     --recall_slice_min "$RECALL_SLICE_MIN" \
     --recall_slice_max "$RECALL_SLICE_MAX" \
+    --window_mode "$WINDOW_MODE" \
     --guardrail_slices_per_session "$GUARDRAIL_SLICES_PER_SESSION" \
   2>&1 | tee "$LOG_HOST/stage2/profile_selection.log"
 SELECT_EXIT=${PIPESTATUS[0]}
