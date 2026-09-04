@@ -96,7 +96,22 @@ mkdir -p "$SMOKE_OUT_HOST" "$(dirname "$SMOKE_TIMING_HOST")"
 SMOKE_S1_C=$(map_output_path "$SMOKE_S1_HOST")
 SMOKE_OUT_C=$(map_output_path "$SMOKE_OUT_HOST")
 SMOKE_TIMING_C=$(map_output_path "$SMOKE_TIMING_HOST")
-cleanup_smoke() { rm -rf "$SMOKE_ROOT_HOST"; }
+cleanup_smoke() {
+  # The integration-smoke container runs as root and therefore creates
+  # root-owned files on the bind-mounted host output tree. Delete those
+  # files from a short-lived root container, then remove the empty host
+  # directory as the calling user. Cleanup must never turn a successful
+  # integration smoke into a failed preflight.
+  if [ -d "$SMOKE_ROOT_HOST" ]; then
+    docker run --rm \
+      --mount "type=bind,source=$SMOKE_ROOT_HOST,target=/smoke" \
+      "$IMAGE" \
+      bash -lc 'find /smoke -mindepth 1 -delete' \
+      >/dev/null 2>&1 || true
+    rmdir "$SMOKE_ROOT_HOST" 2>/dev/null || true
+  fi
+  return 0
+}
 trap cleanup_smoke EXIT
 
 docker run --rm \
