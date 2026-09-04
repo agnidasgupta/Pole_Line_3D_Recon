@@ -1,0 +1,12 @@
+V10 synthetic tests
+===================
+- Same conductor split by a missing run: joined.
+- Nearby almost-parallel conductor with longitudinal overlap: not merged.
+- Two different conductors converging toward the same pole: not merged.
+- Converging conductor endpoints can attach independently to the pole surface.
+- Pole attachment anchors remain distinct.
+- Stage1 class-2 voxel preservation remains 1.0.
+- Synthetic line voxels remain 0.
+
+Expected marker:
+V4_STAGE2_STAGE1_ELECTRICAL_TRACK_SELF_TEST_OK
