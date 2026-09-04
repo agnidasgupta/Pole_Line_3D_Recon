@@ -80,7 +80,57 @@ docker run --rm \
     echo STAGE1_EXACT_SOURCE_AND_PATH_PREFLIGHT_OK
   "
 
-echo "runtime_version=stage1-exact-v8-20260903"
+# Integration smoke: instantiate the real production Stage2 processor and
+# process one saved target slice before any canonical run directory is created.
+# This catches import/API/runtime mismatches that py_compile cannot detect.
+SMOKE_SID="${TARGET_GID//\//__}"
+SMOKE_S1_HOST="$STAGE1_ROOT_HOST/$SMOKE_SID"
+test -f "$SMOKE_S1_HOST/stage1_manifest.csv" || {
+  echo "ERROR: target Stage1 manifest missing for integration smoke: $SMOKE_S1_HOST/stage1_manifest.csv"
+  exit 1
+}
+SMOKE_ROOT_HOST="$OUTPUT_BASE_HOST/.stage1_exact_v8_1_preflight_$$"
+SMOKE_OUT_HOST="$SMOKE_ROOT_HOST/stage2/$SMOKE_SID"
+SMOKE_TIMING_HOST="$SMOKE_ROOT_HOST/timing/$SMOKE_SID.csv"
+mkdir -p "$SMOKE_OUT_HOST" "$(dirname "$SMOKE_TIMING_HOST")"
+SMOKE_S1_C=$(map_output_path "$SMOKE_S1_HOST")
+SMOKE_OUT_C=$(map_output_path "$SMOKE_OUT_HOST")
+SMOKE_TIMING_C=$(map_output_path "$SMOKE_TIMING_HOST")
+cleanup_smoke() { rm -rf "$SMOKE_ROOT_HOST"; }
+trap cleanup_smoke EXIT
+
+docker run --rm \
+  --mount "type=bind,source=$EXP_REPO/v4,target=/workspace/v4,readonly" \
+  --mount "type=bind,source=$TOOL_DIR,target=/workspace/quality,readonly" \
+  --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
+  --workdir /workspace/v4 \
+  -e PYTHONPATH=/workspace/v4:/workspace/quality \
+  "$IMAGE" \
+  python /workspace/quality/run_v4_stage2_stage1_exact.py \
+    --stage1_dir "$SMOKE_S1_C" \
+    --output_dir "$SMOKE_OUT_C" \
+    --session_filter "$TARGET_GID" \
+    --stage2_bundle "$STAGE2_BUNDLE_C" \
+    --calibration_json "$CALIBRATION_C" \
+    --timing_csv "$SMOKE_TIMING_C" \
+    --resume 0 \
+    --max_slices 1 \
+    --write_voxel_audit 0
+
+test -f "$SMOKE_OUT_HOST/STAGE2_STAGE1_EXACT_SUMMARY.json" || {
+  echo "ERROR: integration smoke did not create Stage2 summary"
+  exit 1
+}
+
+docker run --rm \
+  --mount "type=bind,source=$SMOKE_OUT_HOST,target=/smoke,readonly" \
+  "$IMAGE" \
+  python -c 'import json; d=json.load(open("/smoke/STAGE2_STAGE1_EXACT_SUMMARY.json")); t=d["totals"]; assert t["stage1_inferred_line_voxels"]==t["accepted_stage1_line_voxels"]; assert abs(t["stage1_to_stage2_voxel_preservation"]-1.0)<1e-12; assert d["runtime_gt_usage"] is False; assert d["synthetic_line_voxels"]==0; assert d["pole_pair_inference"] is False; print("STAGE1_EXACT_REAL_SLICE_INTEGRATION_OK")'
+
+cleanup_smoke
+trap - EXIT
+
+echo "runtime_version=stage1-exact-v8.1-runtimefix-20260904"
 echo "runtime_gt_usage=false"
 echo "pole_pair_inference=false"
 echo "line_hysteresis_used=false"
@@ -106,11 +156,11 @@ mkdir -p \
   "$RUN_HOST/status"
 
 printf '%s\n' "$RUN_HOST" > "$HOME/LATEST_V4_STAGE2_STAGE1_EXACT_V8_RUN.txt"
-printf '%s\n' 'stage1-exact-v8-20260903' > "$RUN_HOST/selection/MODE.txt"
+printf '%s\n' 'stage1-exact-v8.1-runtimefix-20260904' > "$RUN_HOST/selection/MODE.txt"
 
 cat > "$RUN_HOST/RUN_INFO.txt" <<EOF
 experiment=stage1_exact_line_passthrough_v8
-runtime_version=stage1-exact-v8-20260903
+runtime_version=stage1-exact-v8.1-runtimefix-20260904
 run_scope=$RUN_SCOPE
 target_gid=$TARGET_GID
 source_commit=$(git -C "$EXP_REPO" rev-parse HEAD)
@@ -197,8 +247,8 @@ done < "$RUN_HOST/session_map.tsv"
 DONE=$(find "$RUN_HOST/status" -maxdepth 1 -type f -name '*.stage2.ok' | wc -l | tr -d ' ')
 test "$DONE" -eq "$TOTAL" || { echo "ERROR: completed session count $DONE != $TOTAL"; exit 1; }
 
-printf '%s\n' "PHASE2_STAGE2_OK sessions=$TOTAL runtime=stage1-exact-v8-20260903" > "$RUN_HOST/PHASE2_STAGE2_OK.txt"
-printf '%s\n' "STAGE2_ONLY_COMPLETE sessions=$TOTAL runtime=stage1-exact-v8-20260903" > "$RUN_HOST/STAGE2_ONLY_COMPLETE.txt"
+printf '%s\n' "PHASE2_STAGE2_OK sessions=$TOTAL runtime=stage1-exact-v8.1-runtimefix-20260904" > "$RUN_HOST/PHASE2_STAGE2_OK.txt"
+printf '%s\n' "STAGE2_ONLY_COMPLETE sessions=$TOTAL runtime=stage1-exact-v8.1-runtimefix-20260904" > "$RUN_HOST/STAGE2_ONLY_COMPLETE.txt"
 
 ARCHIVE="$PACKAGE_HOST/v4_stage2_stage1_exact_${RUN_ID}.tar.gz"
 rm -f "$ARCHIVE" "${ARCHIVE}.sha256"

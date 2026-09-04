@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-STAGE1_EXACT_RUNTIME_VERSION = "stage1-exact-v8-20260903"
+STAGE1_EXACT_RUNTIME_VERSION = "stage1-exact-v8.1-runtimefix-20260904"
 
 
 def _coord_keys(coords: np.ndarray, grid_size: tuple[int, int, int]) -> np.ndarray:
@@ -288,23 +288,27 @@ class Stage1ExactStage2Processor:
         voxel_size_ft: float = 0.5,
     ) -> None:
         from v4_realtime_core import load_calibration
-        from v4_stage2_runtime import V4Stage2Processor
+        from v4_realtime_pipeline import V4Stage2Processor
 
         self.grid = tuple(map(int, grid_size))
         self.voxel = float(voxel_size_ft)
         self.calibration = load_calibration(calibration_json)
+        # V4Stage2Processor is defined in v4_realtime_pipeline.  Use the
+        # same positional constructor ordering as production run_v4_stage2.py
+        # so this experiment cannot drift from the accepted V4 API.
         self.production = V4Stage2Processor(
             stage2_bundle,
-            grid_size=self.grid,
-            voxel_size_ft=self.voxel,
-            pole_candidate_threshold=0.15,
-            line_candidate_threshold=0.08,
-            line_weak_threshold=0.04,
-            line_competition_ratio=0.55,
-            pole_min_voxels=4,
-            line_min_voxels=3,
-            edge_width_vox=10,
+            self.grid,
+            self.voxel,
+            0.15,
+            0.08,
+            0.04,
+            0.55,
+            4,
+            3,
+            10,
         )
+        self.production_processor_module = self.production.__class__.__module__
 
     def process(
         self,
@@ -367,6 +371,7 @@ class Stage1ExactStage2Processor:
                 "production_poles_preserved": True,
                 "production_line_outputs_replaced": True,
                 "runtime_version": STAGE1_EXACT_RUNTIME_VERSION,
+                "production_processor_module": self.production_processor_module,
             },
             "timing": {
                 "production_stage2_ms": float(baseline_ms),
