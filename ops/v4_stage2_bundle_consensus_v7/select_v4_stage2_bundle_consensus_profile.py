@@ -28,7 +28,7 @@ from v4_stage_contracts import load_stage1_artifact, stage1_paths
 from v4_realtime_core import load_calibration
 
 
-BUNDLE_CONSENSUS_SELECTOR_VERSION = "bundle-consensus-v7-20260903"
+BUNDLE_CONSENSUS_SELECTOR_VERSION = "bundle-consensus-v7.2-gate-audit-20260903"
 
 def cli() -> argparse.Namespace:
     p = argparse.ArgumentParser()
@@ -510,6 +510,9 @@ def evaluate_processor(
     calibration: dict[str, Any],
     grid: tuple[int, int, int],
     args: argparse.Namespace,
+    profile_name: str = "",
+    window_name: str = "",
+    candidate_audit_sink: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     for record in cache:
@@ -524,6 +527,22 @@ def evaluate_processor(
         if hasattr(row, "session_ordinal"):
             metrics["session_ordinal"] = int(row.session_ordinal)
         rows.append(metrics)
+
+        if candidate_audit_sink is not None:
+            audit = result.get("stage1_label_audit", {}) or {}
+            for candidate in audit.get("residual_candidate_audit", []) or []:
+                record = dict(candidate)
+                record.update({
+                    "profile": str(profile_name),
+                    "window": str(window_name),
+                    "group_id": str(row.group_id),
+                    "slice_seq": int(row.slice_seq),
+                    "session_ordinal": int(getattr(row, "session_ordinal", -1)),
+                    "residual_candidate_components_in_slice": int(audit.get("residual_candidate_components", 0)),
+                    "residual_accepted_components_in_slice": int(audit.get("residual_accepted_components", 0)),
+                    "production_accepted_line_components_in_slice": int(audit.get("production_accepted_line_components", 0)),
+                })
+                candidate_audit_sink.append(record)
     return aggregate(rows), rows
 
 
@@ -744,11 +763,20 @@ def main() -> None:
     baseline = {"precision": baseline_precision, "recall": baseline_recall, "overall": baseline_overall}
 
     records: list[dict[str, Any]] = []
+    candidate_gate_audit: list[dict[str, Any]] = []
     profiles = generated_profiles()
     for index, profile in enumerate(profiles, 1):
         processor = Stage1BundleConsensusStage2Processor(bundle, calibration_path, profile, grid, args.voxel_size_ft)
-        precision, precision_rows = evaluate_processor(processor, precision_cache, calibration, grid, args)
-        recall, recall_rows = evaluate_processor(processor, recall_cache, calibration, grid, args)
+        precision, precision_rows = evaluate_processor(
+            processor, precision_cache, calibration, grid, args,
+            profile_name=profile.name, window_name="precision",
+            candidate_audit_sink=candidate_gate_audit,
+        )
+        recall, recall_rows = evaluate_processor(
+            processor, recall_cache, calibration, grid, args,
+            profile_name=profile.name, window_name="recall",
+            candidate_audit_sink=candidate_gate_audit,
+        )
         overall = aggregate(precision_rows + recall_rows)
         record = profile_record(profile, precision, recall, overall, baseline)
         passed, reasons = pass_target(record, args)
@@ -847,6 +875,52 @@ def main() -> None:
     pd.DataFrame(flat).sort_values("target_score", ascending=False).to_csv(out / "profile_search.csv", index=False)
     (out / "baseline_metrics.json").write_text(json.dumps(baseline, indent=2, sort_keys=True))
     (out / "profile_search.json").write_text(json.dumps(records, indent=2, sort_keys=True))
+
+    audit_df = pd.DataFrame(candidate_gate_audit)
+    audit_df.to_csv(out / "candidate_gate_audit.csv", index=False)
+    if audit_df.empty:
+        pd.DataFrame(columns=["profile", "window", "candidate_count", "accepted_count"]).to_csv(
+            out / "candidate_gate_summary.csv", index=False
+        )
+        pd.DataFrame(columns=["profile", "window", "sibling_reason", "reject_reason", "count"]).to_csv(
+            out / "candidate_rejection_reason_counts.csv", index=False
+        )
+    else:
+        summary_rows: list[dict[str, Any]] = []
+        for (profile_name, window_name), group in audit_df.groupby(["profile", "window"], dropna=False):
+            num = lambda col: pd.to_numeric(group[col], errors="coerce").fillna(0)
+            summary_rows.append({
+                "profile": profile_name,
+                "window": window_name,
+                "candidate_count": int(len(group)),
+                "accepted_count": int(group["accepted"].astype(bool).sum()),
+                "refiner_geometry_pass": int(group["refiner_or_geometry_accept"].astype(bool).sum()),
+                "novel_voxels_pass": int(group["novel_voxels_pass"].astype(bool).sum()),
+                "novel_fraction_pass": int(group["novel_fraction_pass"].astype(bool).sum()),
+                "baseline_overlap_pass": int(group["baseline_overlap_pass"].astype(bool).sum()),
+                "sibling_supported": int(group["sibling_supported"].astype(bool).sum()),
+                "sibling_count_ge_1": int((num("bundle_sibling_count") >= 1).sum()),
+                "sibling_count_ge_2": int((num("bundle_sibling_count") >= 2).sum()),
+                "sibling_count_ge_3": int((num("bundle_sibling_count") >= 3).sum()),
+                "axis_compatible_ge_1": int((num("axis_compatible_count") >= 1).sum()),
+                "longitudinal_compatible_ge_1": int((num("longitudinal_compatible_count") >= 1).sum()),
+                "endpoint_overlap_compatible_ge_1": int((num("endpoint_overlap_compatible_count") >= 1).sum()),
+                "endpoint_extension_compatible_ge_1": int((num("endpoint_extension_compatible_count") >= 1).sum()),
+                "offset_compatible_ge_1": int((num("offset_compatible_count") >= 1).sum()),
+                "top_sibling_reason": str(group["sibling_reason"].fillna("").value_counts().index[0]),
+            })
+        pd.DataFrame(summary_rows).to_csv(out / "candidate_gate_summary.csv", index=False)
+        reason_counts = (
+            audit_df.assign(
+                sibling_reason=audit_df["sibling_reason"].fillna(""),
+                reject_reason=audit_df["reject_reason"].fillna(""),
+            )
+            .groupby(["profile", "window", "sibling_reason", "reject_reason"], dropna=False)
+            .size()
+            .reset_index(name="count")
+            .sort_values(["profile", "window", "count"], ascending=[True, True, False])
+        )
+        reason_counts.to_csv(out / "candidate_rejection_reason_counts.csv", index=False)
 
     if selected is None:
         (out / "NO_SAFE_BUNDLE_CONSENSUS_PROFILE.txt").write_text(

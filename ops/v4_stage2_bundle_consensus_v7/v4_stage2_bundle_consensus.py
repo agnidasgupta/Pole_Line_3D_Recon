@@ -36,6 +36,7 @@ from v4_sparse_components import extract_sparse_components, pca_geometry, sparse
 from v4_stage2_local import add_edge_features
 BUNDLE_CONSENSUS_RUNTIME_VERSION = "bundle-consensus-v7.1-fp-tolerance-20260903"
 BUNDLE_CONSENSUS_NUMERIC_TOL = 1.0e-8
+BUNDLE_CONSENSUS_DIAGNOSTIC_VERSION = "bundle-consensus-v7.2-gate-audit-20260903"
 
 
 from v4_stage2_runtime import (
@@ -789,27 +790,56 @@ def _sibling_support(
     profile: Stage1LabelProfile,
     voxel_size_ft: float,
 ) -> dict[str, Any]:
-    """Require multi-line bundle consensus for a residual conductor candidate.
-
-    Runtime support comes only from production-accepted conductors and actual
-    Stage1-labelled occupied voxels. Pole pairs and GT are intentionally not
-    used. A candidate must agree with at least ``bundle_min_parallel_siblings``
-    parallel production conductors, align longitudinally with them, and have a
-    cross-section spacing compatible with the existing bundle.
-    """
+    """V7.1 bundle consensus with diagnostic gate progression only."""
     candidate = _line_support_descriptor(candidate_points, voxel_size_ft)
     if candidate is None:
-        return {"supported": False, "reason": "candidate_axis_unavailable"}
+        return {
+            "supported": False,
+            "reason": "candidate_axis_unavailable",
+            "baseline_components_total": int(len(baseline_points)),
+            "axis_compatible_count": 0,
+            "longitudinal_compatible_count": 0,
+            "endpoint_overlap_compatible_count": 0,
+            "endpoint_extension_compatible_count": 0,
+            "offset_compatible_count": 0,
+        }
 
     cmodel = candidate["model"]
     cpoints = candidate["points"]
     cs, _, _ = cmodel.project(cpoints)
     cmin, cmax = float(np.min(cs)), float(np.max(cs))
     cspan = max(cmax - cmin, 1e-9)
-    ccenter = np.median(cpoints, axis=0)
 
     compatible: list[dict[str, Any]] = []
     cross_points: list[np.ndarray] = []
+    total = int(len(baseline_points))
+    axis_count = longitudinal_count = endpoint_overlap_count = endpoint_extension_count = offset_count = 0
+    min_axis_angle = float("inf")
+    max_longitudinal_overlap = 0.0
+    max_endpoint_overlap = 0.0
+    min_endpoint_extension = float("inf")
+    min_cross_offset = float("inf")
+    max_cross_offset = 0.0
+
+    def diag(reason: str, supported: bool = False, **extra: Any) -> dict[str, Any]:
+        out = {
+            "supported": bool(supported),
+            "reason": reason,
+            "baseline_components_total": total,
+            "axis_compatible_count": int(axis_count),
+            "longitudinal_compatible_count": int(longitudinal_count),
+            "endpoint_overlap_compatible_count": int(endpoint_overlap_count),
+            "endpoint_extension_compatible_count": int(endpoint_extension_count),
+            "offset_compatible_count": int(offset_count),
+            "best_axis_angle_deg": None if not np.isfinite(min_axis_angle) else float(min_axis_angle),
+            "best_longitudinal_overlap_fraction": float(max_longitudinal_overlap),
+            "best_endpoint_overlap_fraction": float(max_endpoint_overlap),
+            "best_endpoint_extension_ft": None if not np.isfinite(min_endpoint_extension) else float(min_endpoint_extension),
+            "min_cross_section_offset_ft_seen": None if not np.isfinite(min_cross_offset) else float(min_cross_offset),
+            "max_cross_section_offset_ft_seen": float(max_cross_offset),
+        }
+        out.update(extra)
+        return out
 
     for component_id, points in baseline_points.items():
         baseline = _line_support_descriptor(points, voxel_size_ft)
@@ -817,35 +847,45 @@ def _sibling_support(
             continue
         bmodel = baseline["model"]
         angle = _angle_deg(cmodel.axis_xy, bmodel.axis_xy)
+        min_axis_angle = min(min_axis_angle, float(angle))
         if angle > float(profile.sibling_max_axis_angle_deg) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
+        axis_count += 1
 
         bpoints = baseline["points"]
         bs = (bpoints[:, :2] - cmodel.center_xy) @ cmodel.axis_xy
         bmin, bmax = float(np.min(bs)), float(np.max(bs))
         overlap = max(0.0, min(cmax, bmax) - max(cmin, bmin))
         overlap_fraction = float(overlap / cspan)
+        max_longitudinal_overlap = max(max_longitudinal_overlap, overlap_fraction)
         if overlap_fraction + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.sibling_min_longitudinal_overlap_fraction):
             continue
+        longitudinal_count += 1
 
-        # Require endpoints to be broadly coextensive, not merely a short
-        # crossing that overlaps a central portion of the candidate.
         endpoint_overlap = float(overlap / max(cspan, bmax - bmin, 1e-9))
-        extension_vox = max(0.0, cmin - bmin, bmin - cmin, cmax - bmax, bmax - cmax)
-        endpoint_extension_ft = float(extension_vox * voxel_size_ft)
+        max_endpoint_overlap = max(max_endpoint_overlap, endpoint_overlap)
         if endpoint_overlap + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.bundle_min_endpoint_overlap_fraction):
             continue
+        endpoint_overlap_count += 1
+
+        extension_vox = max(0.0, cmin - bmin, bmin - cmin, cmax - bmax, bmax - cmax)
+        endpoint_extension_ft = float(extension_vox * voxel_size_ft)
+        min_endpoint_extension = min(min_endpoint_extension, endpoint_extension_ft)
         if endpoint_extension_ft > float(profile.bundle_max_endpoint_extension_ft) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
+        endpoint_extension_count += 1
 
         bcenter = np.median(bpoints, axis=0)
         _, transverse, vertical = cmodel.project(bcenter.reshape(1, 3))
         cross = np.array([float(transverse[0]), float(vertical[0])], dtype=float) * float(voxel_size_ft)
         offset_ft = float(np.linalg.norm(cross))
+        min_cross_offset = min(min_cross_offset, offset_ft)
+        max_cross_offset = max(max_cross_offset, offset_ft)
         if offset_ft + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.sibling_min_cross_section_offset_ft):
             continue
         if offset_ft > float(profile.sibling_max_cross_section_offset_ft) + BUNDLE_CONSENSUS_NUMERIC_TOL:
             continue
+        offset_count += 1
 
         compatible.append({
             "component_id": str(component_id),
@@ -859,15 +899,12 @@ def _sibling_support(
 
     min_siblings = max(1, int(profile.bundle_min_parallel_siblings))
     if len(compatible) < min_siblings:
-        return {
-            "supported": False,
-            "reason": "insufficient_parallel_bundle_siblings",
-            "bundle_sibling_count": int(len(compatible)),
-        }
+        return diag(
+            "insufficient_parallel_bundle_siblings",
+            bundle_sibling_count=int(len(compatible)),
+            bundle_min_parallel_siblings=int(min_siblings),
+        )
 
-    # Estimate conductor spacing from accepted sibling-to-sibling distances in
-    # the candidate cross-section. The nearest candidate-to-sibling distance
-    # should be consistent with that bundle spacing.
     cp = np.vstack(cross_points)
     pairwise: list[float] = []
     for i in range(len(cp)):
@@ -876,37 +913,36 @@ def _sibling_support(
             if d > 1e-6:
                 pairwise.append(d)
     nearest_candidate_spacing = float(np.min(np.linalg.norm(cp, axis=1)))
-
     spacing_reference = float(np.median(pairwise)) if pairwise else nearest_candidate_spacing
     spacing_ratio = float(nearest_candidate_spacing / max(spacing_reference, 1e-9))
     if (
         spacing_ratio + BUNDLE_CONSENSUS_NUMERIC_TOL < float(profile.bundle_spacing_ratio_min)
         or spacing_ratio > float(profile.bundle_spacing_ratio_max) + BUNDLE_CONSENSUS_NUMERIC_TOL
     ):
-        return {
-            "supported": False,
-            "reason": "bundle_spacing_inconsistent",
-            "bundle_sibling_count": int(len(compatible)),
-            "bundle_nearest_spacing_ft": nearest_candidate_spacing,
-            "bundle_reference_spacing_ft": spacing_reference,
-            "bundle_spacing_ratio": spacing_ratio,
-        }
+        return diag(
+            "bundle_spacing_inconsistent",
+            bundle_sibling_count=int(len(compatible)),
+            bundle_nearest_spacing_ft=nearest_candidate_spacing,
+            bundle_reference_spacing_ft=spacing_reference,
+            bundle_spacing_ratio=spacing_ratio,
+        )
 
     compatible.sort(key=lambda x: (x["overlap_fraction"], -x["axis_angle_deg"]), reverse=True)
     best = compatible[0]
-    return {
-        "supported": True,
-        "sibling_component_id": best["component_id"],
-        "sibling_axis_angle_deg": best["axis_angle_deg"],
-        "sibling_cross_section_offset_ft": best["offset_ft"],
-        "sibling_longitudinal_overlap_fraction": best["overlap_fraction"],
-        "bundle_sibling_count": int(len(compatible)),
-        "bundle_nearest_spacing_ft": nearest_candidate_spacing,
-        "bundle_reference_spacing_ft": spacing_reference,
-        "bundle_spacing_ratio": spacing_ratio,
-        "bundle_endpoint_overlap_fraction": float(min(x["endpoint_overlap_fraction"] for x in compatible)),
-        "bundle_max_endpoint_extension_ft": float(max(x["endpoint_extension_ft"] for x in compatible)),
-    }
+    return diag(
+        "supported",
+        supported=True,
+        sibling_component_id=best["component_id"],
+        sibling_axis_angle_deg=best["axis_angle_deg"],
+        sibling_cross_section_offset_ft=best["offset_ft"],
+        sibling_longitudinal_overlap_fraction=best["overlap_fraction"],
+        bundle_sibling_count=int(len(compatible)),
+        bundle_nearest_spacing_ft=nearest_candidate_spacing,
+        bundle_reference_spacing_ft=spacing_reference,
+        bundle_spacing_ratio=spacing_ratio,
+        bundle_endpoint_overlap_fraction=float(min(x["endpoint_overlap_fraction"] for x in compatible)),
+        bundle_max_endpoint_extension_ft=float(max(x["endpoint_extension_ft"] for x in compatible)),
+    )
 
 
 def _empty_like(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1085,13 +1121,34 @@ class Stage1BundleConsensusStage2Processor:
                 candidate_audit.append({
                     "component_id": cid,
                     "accepted": bool(final_accept),
+                    "refiner_or_geometry_accept": bool(row.get("component_accept", False)),
+                    "refiner_probability": float(row.get("refiner_probability", 0.0) or 0.0),
                     "novel_voxels": novel_count,
                     "novel_fraction": novel_fraction,
                     "baseline_overlap_fraction": overlap_fraction,
+                    "novel_voxels_pass": bool(novel_count >= int(self.profile.residual_min_novel_voxels)),
+                    "novel_fraction_pass": bool(novel_fraction >= float(self.profile.residual_min_novel_fraction)),
+                    "baseline_overlap_pass": bool(overlap_fraction <= float(self.profile.residual_max_baseline_overlap_fraction) + BUNDLE_CONSENSUS_NUMERIC_TOL),
                     "sibling_supported": bool(sibling.get("supported", False)),
+                    "sibling_reason": str(sibling.get("reason", "")),
                     "sibling_component_id": str(sibling.get("sibling_component_id", "")),
                     "bundle_sibling_count": int(sibling.get("bundle_sibling_count", 0) or 0),
+                    "bundle_min_parallel_siblings": int(sibling.get("bundle_min_parallel_siblings", self.profile.bundle_min_parallel_siblings) or self.profile.bundle_min_parallel_siblings),
+                    "baseline_components_total": int(sibling.get("baseline_components_total", 0) or 0),
+                    "axis_compatible_count": int(sibling.get("axis_compatible_count", 0) or 0),
+                    "longitudinal_compatible_count": int(sibling.get("longitudinal_compatible_count", 0) or 0),
+                    "endpoint_overlap_compatible_count": int(sibling.get("endpoint_overlap_compatible_count", 0) or 0),
+                    "endpoint_extension_compatible_count": int(sibling.get("endpoint_extension_compatible_count", 0) or 0),
+                    "offset_compatible_count": int(sibling.get("offset_compatible_count", 0) or 0),
+                    "best_axis_angle_deg": sibling.get("best_axis_angle_deg", None),
+                    "best_longitudinal_overlap_fraction": sibling.get("best_longitudinal_overlap_fraction", None),
+                    "best_endpoint_overlap_fraction": sibling.get("best_endpoint_overlap_fraction", None),
+                    "best_endpoint_extension_ft": sibling.get("best_endpoint_extension_ft", None),
+                    "min_cross_section_offset_ft_seen": sibling.get("min_cross_section_offset_ft_seen", None),
+                    "max_cross_section_offset_ft_seen": sibling.get("max_cross_section_offset_ft_seen", None),
                     "bundle_spacing_ratio": sibling.get("bundle_spacing_ratio", None),
+                    "bundle_nearest_spacing_ft": sibling.get("bundle_nearest_spacing_ft", None),
+                    "bundle_reference_spacing_ft": sibling.get("bundle_reference_spacing_ft", None),
                     "bundle_endpoint_overlap_fraction": sibling.get("bundle_endpoint_overlap_fraction", None),
                     "bundle_max_endpoint_extension_ft": sibling.get("bundle_max_endpoint_extension_ft", None),
                     "reject_reason": ";".join(reasons),

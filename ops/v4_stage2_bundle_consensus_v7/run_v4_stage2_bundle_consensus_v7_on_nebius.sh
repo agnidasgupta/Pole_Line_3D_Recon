@@ -31,8 +31,8 @@ RESUME="${RESUME:-0}"
 WRITE_VOXEL_AUDIT="${WRITE_VOXEL_AUDIT:-1}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-0}"
 RUN_STAMP="${RUN_STAMP:-}"
-SELECTOR_VERSION_EXPECTED="bundle-consensus-v7-20260903"
-SELECTOR_SHA256_EXPECTED="e1b94a75249d7daf9d9b5e4266bf2e5de016d66b4320a668e4b36c37a3df6228"
+SELECTOR_VERSION_EXPECTED="bundle-consensus-v7.2-gate-audit-20260903"
+SELECTOR_SHA256_EXPECTED="b33cd4fe822802c283ff816065ddcd1535dea84bf73e81b704de93c4736ceac0"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -283,7 +283,7 @@ printf '%s\n' "$RUN_HOST" > "$HOME/LATEST_V4_STAGE23_QUALITY_V2.txt"
 cat > "$RUN_HOST/RUN_INFO.txt" <<EOF
 created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 layout_contract=v4_stage23_quality/full_run_v2_<UTC>/stage2/<SID>
-experiment=production_baseline_plus_stage1_bundle_consensus_v7
+experiment=production_baseline_plus_stage1_bundle_consensus_v7_diagnostic_gate_audit
 repository=$EXP_REPO
 branch=$(git -C "$EXP_REPO" branch --show-current)
 commit=$COMMIT
