@@ -29,6 +29,30 @@ from v4_stage2_stage1_electrical_tracks import STAGE1_ELECTRICAL_TRACK_RUNTIME_V
 HOST_OUTPUT_PREFIX = Path("/workspace/voxel_poleline/outputs")
 CONTAINER_OUTPUT_PREFIX = Path("/outputs")
 
+BRIDGE_COLUMNS = [
+    "fragment_a", "fragment_b", "a_endpoint_index", "b_endpoint_index",
+    "gap_ft", "longitudinal_gap_ft", "longitudinal_overlap_ft",
+    "lane_center_offset_ft", "endpoint_lateral_jump_ft", "axis_angle_deg",
+    "bridge_angle_a_deg", "bridge_angle_b_deg", "vertical_gap_ft",
+    "near_pole_bridge_guard", "stage1_voxel_support_fraction",
+    "stage1_voxel_support_samples", "stage1_voxel_support_total_samples",
+    "passed", "reject_reason", "all_failed_reasons", "selected",
+    "selection_reject_reason",
+]
+TRACK_COLUMNS = [
+    "component_id", "source_component_index", "raw_fragment_count", "n_voxels",
+    "vertex_count", "bridge_count", "pole_attachment_count", "max_bridge_gap_ft",
+    "track_radius_p95_ft", "horizontal_span_ft", "vertical_span_ft", "score_mean",
+    "max_turn_deg", "geometry_support_fraction",
+]
+ATTACHMENT_COLUMNS = [
+    "component_id", "track_end", "pole_component_id",
+    "endpoint_distance_to_pole_axis_ft", "endpoint_to_pole_angle_deg",
+    "attachment_height_fraction", "anchor_x", "anchor_y", "anchor_z",
+    "pole_surface_radius_ft", "contact_pole_voxel_x", "contact_pole_voxel_y",
+    "contact_pole_voxel_z", "contact_distance_vox", "attachment_support_mode",
+]
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Stage2 joining of deployed Stage1 line-label fragments into tracks")
@@ -204,16 +228,29 @@ def main() -> None:
                 "v4_deployed_label": np.full(len(line_idx), 2, dtype=np.int8),
             })
             atomic_csv(voxel_frame, diag["stage1_voxels"], columns=list(voxel_frame.columns))
-            # Track joining preserves the Stage1 class-2 voxel set exactly.
-            atomic_csv(voxel_frame, diag["accepted_voxels"], columns=list(voxel_frame.columns))
-            bridge_frame = pd.DataFrame(result["selected_bridges"])
-            atomic_csv(bridge_frame, diag["bridges"], columns=list(bridge_frame.columns))
-            candidate_frame = pd.DataFrame(result["bridge_candidates"])
-            atomic_csv(candidate_frame, diag["bridge_candidates"], columns=list(candidate_frame.columns))
-            track_frame = pd.DataFrame(result["track_rows"])
-            atomic_csv(track_frame, diag["tracks"], columns=list(track_frame.columns))
-            attach_frame = pd.DataFrame(result["pole_attachment_rows"])
-            atomic_csv(attach_frame, diag["pole_attachments"], columns=list(attach_frame.columns))
+            accepted_idx = np.asarray(result["accepted_line_indices"], dtype=np.int64)
+            accepted_frame = pd.DataFrame({
+                "x": coords[accepted_idx, 0], "y": coords[accepted_idx, 1],
+                "z": coords[accepted_idx, 2], "v4_pole_score": pole_scores[accepted_idx],
+                "v4_line_score": line_scores[accepted_idx],
+                "v4_semantic_head": semantic[accepted_idx],
+                "v4_deployed_label": np.full(len(accepted_idx), 2, dtype=np.int8),
+            })
+            input_keys = set(map(tuple, coords[line_idx].tolist()))
+            accepted_keys = set(map(tuple, coords[accepted_idx].tolist()))
+            if input_keys != accepted_keys or len(accepted_idx) != len(line_idx):
+                raise RuntimeError("accepted Stage1 line voxel identity check failed")
+            atomic_csv(accepted_frame, diag["accepted_voxels"], columns=list(accepted_frame.columns))
+            bridge_frame = pd.DataFrame(result["selected_bridges"], columns=BRIDGE_COLUMNS)
+            atomic_csv(bridge_frame, diag["bridges"], columns=BRIDGE_COLUMNS)
+            candidate_frame_raw = pd.DataFrame(result["bridge_candidates"])
+            candidate_columns = list(dict.fromkeys(BRIDGE_COLUMNS + list(candidate_frame_raw.columns)))
+            candidate_frame = pd.DataFrame(result["bridge_candidates"], columns=candidate_columns)
+            atomic_csv(candidate_frame, diag["bridge_candidates"], columns=candidate_columns)
+            track_frame = pd.DataFrame(result["track_rows"], columns=TRACK_COLUMNS)
+            atomic_csv(track_frame, diag["tracks"], columns=TRACK_COLUMNS)
+            attach_frame = pd.DataFrame(result["pole_attachment_rows"], columns=ATTACHMENT_COLUMNS)
+            atomic_csv(attach_frame, diag["pole_attachments"], columns=ATTACHMENT_COLUMNS)
 
         audit = {
             **result["stage1_electrical_track_audit"],

@@ -141,6 +141,13 @@ def main():
         'pole_surface_standoff_min_ft':0.5,
         'min_fragment_voxels':2,
         'vertex_bin_ft':1.0,
+        'centerline_coverage_radius_vox':1,
+        'max_local_turn_deg':60.0,
+        'turn_tangent_window_vox':3,
+        'max_supported_chord_vox':4.0,
+        'max_supported_chord_lookahead':24,
+        'support_sample_step_vox':0.25,
+        'pole_contact_max_chebyshev_vox':1.0,
     }
 
     compatible=[]
@@ -155,7 +162,7 @@ def main():
     learned_vertical=max(3.0,min(6.0,pctl(vertical,.95,4.0)))
 
     profile={
-        'profile_version':'velasco-stage1-electrical-v10-20260904',
+        'profile_version':'velasco-stage1-electrical-v10-voxel-supported-20260908',
         'learned_from_session':a.session_filter,
         'reference_ordinals':[a.reference_min,a.reference_max],
         'fragmentation_ordinals':[a.fragment_min,a.fragment_max],
@@ -175,12 +182,23 @@ def main():
         'pole_surface_standoff_min_ft':0.5,
         'min_fragment_voxels':2,
         'vertex_bin_ft':1.0,
+        'centerline_coverage_radius_vox':1,
+        'max_local_turn_deg':60.0,
+        'turn_tangent_window_vox':3,
+        'max_supported_chord_vox':4.0,
+        'max_supported_chord_lookahead':24,
+        'support_sample_step_vox':0.25,
+        'pole_contact_max_chebyshev_vox':1.0,
         'reference_track_radius_p95_ft':round(radius95,6),
         'reference_parallel_spacing_p10_ft':round(spacing10,6),
         'compatible_target_gap_p95_ft':round(pctl(gaps,.95,0.0),6),
         'compatible_target_pairs':int(len(compatible)),
         'electrical_rule_parallel_lanes_never_merge':True,
         'electrical_rule_near_pole_line_to_line_bridge':False,
+        'disconnected_fragment_bridge_allowed':False,
+        'line_geometry_must_stay_inside_stage1_voxel_cells':True,
+        'pole_attachment_requires_stage1_voxel_contact':True,
+        'open_line_endpoints_preserved':True,
     }
     (out/'selected_electrical_profile.json').write_text(json.dumps(profile,indent=2,sort_keys=True)+'\n')
     frame=pd.DataFrame(rows).sort_values('session_ordinal')
@@ -202,10 +220,9 @@ def main():
         'fragmentation_window':stats(tar),
         'learned_profile':profile,
         'interpretation':(
-            'V9 correctly bridged fragmented Stage1 conductors but could merge nearby parallel or converging lanes. '
-            'V10 requires end-to-end same-lane continuation, rejects longitudinally overlapping lanes, constrains '
-            'track lateral drift, forbids line-to-line bridges near detected poles, and allows separate track endpoints '
-            'to attach to detected pole surfaces.'
+            'Strict V10 traces each 26-connected Stage1 class-2 component through inferred voxel cells. '
+            'Disconnected fragments remain open for Stage3; Stage2 never creates unsupported chords or near-pole '
+            'line-to-line bridges. Pole attachment is recorded only at direct inferred line/pole voxel contact.'
         ),
     }
     (out/'velasco_electrical_profile_report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')

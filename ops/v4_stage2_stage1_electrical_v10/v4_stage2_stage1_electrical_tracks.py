@@ -4,15 +4,17 @@
 Principles:
 - Runtime starts only from deployed Stage-1 class-2 (line) voxels.
 - Production pole detections are preserved.
-- Missing runs between fragments may be bridged only as same-lane, end-to-end continuation.
+- Stage 2 never bridges disconnected Stage-1 line components.
+- Every emitted polyline segment stays inside inferred line-voxel support.
+- Branches and sharp turns become separate open conductor fragments.
+- A line may attach to a pole only at direct inferred line/pole voxel contact.
 - Overlapping/parallel/converging lanes are never merged into one conductor track.
-- Any line-to-line bridge that passes near a detected pole is forbidden.
-- Track endpoints may attach independently to the detected pole surface.
 - No synthetic line voxels and no runtime GT usage.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+import heapq
 import math
 import time
 from typing import Any
@@ -20,7 +22,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-20260904"
+STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-voxel-supported-20260908"
 
 
 def resolve_deployed_stage1_labels(
@@ -161,6 +163,316 @@ def _angle_deg(a: np.ndarray, b: np.ndarray) -> float:
         return 90.0
     dot = float(np.clip(abs(np.dot(aa / na, bb / nb)), -1.0, 1.0))
     return float(math.degrees(math.acos(dot)))
+
+
+_NEIGHBOR_26 = [
+    (dx, dy, dz)
+    for dz in (-1, 0, 1)
+    for dy in (-1, 0, 1)
+    for dx in (-1, 0, 1)
+    if not (dx == dy == dz == 0)
+]
+
+
+def _voxel_key(point: np.ndarray) -> tuple[int, int, int]:
+    p = np.asarray(point, dtype=np.int64)
+    return int(p[0]), int(p[1]), int(p[2])
+
+
+def _point_inside_voxel_support(
+    point: np.ndarray,
+    support_keys: set[tuple[int, int, int]],
+    tolerance_vox: float = 0.500001,
+) -> bool:
+    """True only when a point lies inside a labelled voxel cell."""
+    q = np.asarray(point, dtype=float)
+    lo = np.ceil(q - float(tolerance_vox)).astype(int)
+    hi = np.floor(q + float(tolerance_vox)).astype(int)
+    for x in range(int(lo[0]), int(hi[0]) + 1):
+        for y in range(int(lo[1]), int(hi[1]) + 1):
+            for z in range(int(lo[2]), int(hi[2]) + 1):
+                if (x, y, z) in support_keys:
+                    return True
+    return False
+
+
+def _segment_voxel_support_fraction(
+    a: np.ndarray,
+    b: np.ndarray,
+    support_keys: set[tuple[int, int, int]],
+    sample_step_vox: float = 0.25,
+) -> tuple[float, int, int]:
+    """Sample a segment and require every sample to occupy inferred support."""
+    pa = np.asarray(a, dtype=float)
+    pb = np.asarray(b, dtype=float)
+    length = float(np.linalg.norm(pb - pa))
+    samples = max(1, int(math.ceil(length / max(float(sample_step_vox), 1.0e-6))))
+    supported = 0
+    total = samples + 1
+    for i in range(total):
+        q = pa + (float(i) / float(samples)) * (pb - pa)
+        supported += int(_point_inside_voxel_support(q, support_keys))
+    return float(supported / total), int(supported), int(total)
+
+
+@dataclass
+class TracedPath:
+    source_component_index: int
+    voxel_indices: np.ndarray
+    path_indices: np.ndarray
+
+
+def _component_adjacency(
+    voxel_indices: np.ndarray,
+    coords: np.ndarray,
+) -> tuple[dict[int, list[tuple[int, float]]], dict[tuple[int, int, int], int]]:
+    ids = [int(i) for i in np.asarray(voxel_indices, dtype=np.int64)]
+    key_to_index = {_voxel_key(coords[i]): i for i in ids}
+    adjacency: dict[int, list[tuple[int, float]]] = {i: [] for i in ids}
+    for i in ids:
+        x, y, z = _voxel_key(coords[i])
+        for dx, dy, dz in _NEIGHBOR_26:
+            j = key_to_index.get((x + dx, y + dy, z + dz))
+            if j is None or j <= i:
+                continue
+            weight = float(math.sqrt(dx * dx + dy * dy + dz * dz))
+            adjacency[i].append((j, weight))
+            adjacency[j].append((i, weight))
+    return adjacency, key_to_index
+
+
+def _restricted_component(
+    seed: int,
+    allowed: set[int],
+    adjacency: dict[int, list[tuple[int, float]]],
+) -> set[int]:
+    found = {int(seed)}
+    stack = [int(seed)]
+    while stack:
+        i = stack.pop()
+        for j, _ in adjacency[i]:
+            if j in allowed and j not in found:
+                found.add(j)
+                stack.append(j)
+    return found
+
+
+def _graph_farthest(
+    start: int,
+    allowed: set[int],
+    adjacency: dict[int, list[tuple[int, float]]],
+) -> tuple[int, dict[int, int]]:
+    distance = {int(start): 0.0}
+    previous: dict[int, int] = {}
+    heap = [(0.0, int(start))]
+    while heap:
+        d, i = heapq.heappop(heap)
+        if d != distance.get(i):
+            continue
+        for j, weight in adjacency[i]:
+            if j not in allowed:
+                continue
+            nd = d + float(weight)
+            if nd + 1.0e-12 < distance.get(j, float("inf")):
+                distance[j] = nd
+                previous[j] = i
+                heapq.heappush(heap, (nd, j))
+    farthest = max(distance, key=lambda i: (distance[i], -int(i)))
+    return int(farthest), previous
+
+
+def _diameter_path(
+    nodes: set[int],
+    adjacency: dict[int, list[tuple[int, float]]],
+) -> list[int]:
+    if len(nodes) <= 1:
+        return list(nodes)
+    first, _ = _graph_farthest(min(nodes), nodes, adjacency)
+    last, previous = _graph_farthest(first, nodes, adjacency)
+    path = [last]
+    while path[-1] != first:
+        parent = previous.get(path[-1])
+        if parent is None:
+            raise RuntimeError("voxel graph diameter reconstruction failed")
+        path.append(parent)
+    path.reverse()
+    return path
+
+
+def _turn_angle_deg(incoming: np.ndarray, outgoing: np.ndarray) -> float:
+    a = np.asarray(incoming, dtype=float)
+    b = np.asarray(outgoing, dtype=float)
+    na = float(np.linalg.norm(a))
+    nb = float(np.linalg.norm(b))
+    if na <= 1.0e-12 or nb <= 1.0e-12:
+        return 0.0
+    dot = float(np.clip(np.dot(a / na, b / nb), -1.0, 1.0))
+    return float(math.degrees(math.acos(dot)))
+
+
+def _split_path_at_sharp_turns(
+    path: list[int],
+    coords: np.ndarray,
+    max_turn_deg: float,
+    tangent_window: int,
+) -> list[list[int]]:
+    if len(path) < 3:
+        return [path]
+    p = np.asarray(coords[path], dtype=float)
+    cuts: list[int] = []
+    window = max(1, int(tangent_window))
+    last_cut = 0
+    for i in range(1, len(path) - 1):
+        local_window = min(window, i, len(path) - 1 - i)
+        incoming = p[i] - p[i - local_window]
+        outgoing = p[i + local_window] - p[i]
+        sustained_turn = _turn_angle_deg(incoming, outgoing)
+        immediate_turn = _turn_angle_deg(p[i] - p[i - 1], p[i + 1] - p[i])
+        if sustained_turn <= float(max_turn_deg) and immediate_turn <= 120.0:
+            continue
+        if i - last_cut < 2:
+            continue
+        cuts.append(i)
+        last_cut = i + 1
+    if not cuts:
+        return [path]
+    result: list[list[int]] = []
+    start = 0
+    for cut in cuts:
+        part = path[start : cut + 1]
+        if part:
+            result.append(part)
+        start = cut + 1
+    tail = path[start:]
+    if tail:
+        result.append(tail)
+    return result
+
+
+def _partition_assigned_voxels(
+    assigned: set[int],
+    path_parts: list[list[int]],
+    coords: np.ndarray,
+) -> list[np.ndarray]:
+    if len(path_parts) == 1:
+        return [np.asarray(sorted(assigned), dtype=np.int64)]
+    buckets: list[list[int]] = [[] for _ in path_parts]
+    part_points = [np.asarray(coords[p], dtype=float) for p in path_parts]
+    for idx in sorted(assigned):
+        q = np.asarray(coords[idx], dtype=float)
+        distances = [float(np.min(np.sum((pts - q) ** 2, axis=1))) for pts in part_points]
+        buckets[int(np.argmin(distances))].append(int(idx))
+    return [np.asarray(bucket, dtype=np.int64) for bucket in buckets]
+
+
+def trace_component_paths(
+    component_index: int,
+    voxel_indices: np.ndarray,
+    coords: np.ndarray,
+    profile: dict[str, Any],
+) -> list[TracedPath]:
+    """Cover one 26-connected component with deterministic supported paths."""
+    adjacency, key_to_index = _component_adjacency(voxel_indices, coords)
+    remaining = set(adjacency)
+    traces: list[TracedPath] = []
+    coverage_radius = max(0, int(profile.get("centerline_coverage_radius_vox", 1)))
+    max_turn = float(profile.get("max_local_turn_deg", 60.0))
+    tangent_window = int(profile.get("turn_tangent_window_vox", 3))
+
+    while remaining:
+        sub = _restricted_component(min(remaining), remaining, adjacency)
+        path = _diameter_path(sub, adjacency)
+        if not path:
+            raise RuntimeError("empty path produced for nonempty line component")
+
+        covered: set[int] = set()
+        for idx in path:
+            x, y, z = _voxel_key(coords[idx])
+            for dx in range(-coverage_radius, coverage_radius + 1):
+                for dy in range(-coverage_radius, coverage_radius + 1):
+                    for dz in range(-coverage_radius, coverage_radius + 1):
+                        other = key_to_index.get((x + dx, y + dy, z + dz))
+                        if other is not None and other in sub and other in remaining:
+                            covered.add(int(other))
+        covered.update(path)
+        if not covered:
+            raise RuntimeError("line path failed to cover any Stage1 voxel")
+        remaining.difference_update(covered)
+
+        parts = _split_path_at_sharp_turns(path, coords, max_turn, tangent_window)
+        assigned_parts = _partition_assigned_voxels(covered, parts, coords)
+        for part, assigned_part in zip(parts, assigned_parts):
+            if not len(assigned_part):
+                continue
+            traces.append(TracedPath(
+                source_component_index=int(component_index),
+                voxel_indices=assigned_part,
+                path_indices=np.asarray(part, dtype=np.int64),
+            ))
+
+    all_assigned = np.concatenate([trace.voxel_indices for trace in traces]) if traces else np.empty(0, np.int64)
+    if len(all_assigned) != len(voxel_indices) or len(np.unique(all_assigned)) != len(voxel_indices):
+        raise RuntimeError(
+            f"line path cover mismatch for component {component_index}: "
+            f"input={len(voxel_indices)} assigned={len(all_assigned)} unique={len(np.unique(all_assigned))}"
+        )
+    return traces
+
+
+def _strictly_simplify_supported_path(
+    path_points: np.ndarray,
+    profile: dict[str, Any],
+) -> np.ndarray:
+    """Reduce vertices only when the whole chord remains in path voxel cells."""
+    p = np.asarray(path_points, dtype=float)
+    if len(p) <= 2:
+        return p.copy()
+    support_keys = {_voxel_key(q) for q in p}
+    max_span = max(1.0, float(profile.get("max_supported_chord_vox", 4.0)))
+    max_lookahead = max(2, int(profile.get("max_supported_chord_lookahead", 24)))
+    out = [p[0]]
+    i = 0
+    while i < len(p) - 1:
+        upper = min(len(p) - 1, i + max_lookahead)
+        chosen = i + 1
+        for j in range(upper, i, -1):
+            if float(np.linalg.norm(p[j] - p[i])) > max_span:
+                continue
+            fraction, _, _ = _segment_voxel_support_fraction(p[i], p[j], support_keys)
+            if math.isclose(fraction, 1.0, rel_tol=0.0, abs_tol=1.0e-12):
+                chosen = j
+                break
+        out.append(p[chosen])
+        i = chosen
+    return np.asarray(out, dtype=float)
+
+
+def _polyline_support_counts(
+    vertices: np.ndarray,
+    support_keys: set[tuple[int, int, int]],
+) -> tuple[int, int]:
+    v = np.asarray(vertices, dtype=float)
+    if len(v) == 0:
+        return 0, 0
+    if len(v) == 1:
+        ok = int(_point_inside_voxel_support(v[0], support_keys))
+        return int(ok), 1
+    supported = total = 0
+    for a, b in zip(v[:-1], v[1:]):
+        _, good, count = _segment_voxel_support_fraction(a, b, support_keys)
+        supported += int(good)
+        total += int(count)
+    return int(supported), int(total)
+
+
+def _polyline_max_turn_deg(vertices: np.ndarray) -> float:
+    v = np.asarray(vertices, dtype=float)
+    if len(v) < 3:
+        return 0.0
+    return max(
+        (_turn_angle_deg(v[i] - v[i - 1], v[i + 1] - v[i]) for i in range(1, len(v) - 1)),
+        default=0.0,
+    )
 
 
 @dataclass
@@ -337,6 +649,11 @@ def candidate_fragment_bridges(
     profile: dict[str, Any],
     poles: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
+    all_line_indices = (
+        np.unique(np.concatenate([f.voxel_indices for f in fragments]))
+        if fragments else np.empty(0, dtype=np.int64)
+    )
+    support_keys = {_voxel_key(coords[int(i)]) for i in all_line_indices}
     max_gap = float(profile["max_gap_ft"])
     max_lane = float(profile["max_lane_offset_ft"])
     max_angle = float(profile["max_axis_angle_deg"])
@@ -354,7 +671,14 @@ def candidate_fragment_bridges(
             if len(b.voxel_indices) < min_vox:
                 continue
             m = _bridge_metrics(a, b, coords, voxel_size_ft, poles, profile)
+            pa = np.asarray(coords[int(m["a_endpoint_index"])], dtype=float)
+            pb = np.asarray(coords[int(m["b_endpoint_index"])], dtype=float)
+            support_fraction, support_count, support_total = _segment_voxel_support_fraction(
+                pa, pb, support_keys, float(profile.get("support_sample_step_vox", 0.25))
+            )
+            support_ok = math.isclose(support_fraction, 1.0, rel_tol=0.0, abs_tol=1.0e-12)
             checks = [
+                (support_ok, "stage1_voxel_support"),
                 (m["longitudinal_overlap_ft"] <= max_overlap, "longitudinal_overlap"),
                 (m["gap_ft"] <= max_gap, "gap"),
                 (m["lane_center_offset_ft"] <= max_lane, "lane_center_offset"),
@@ -376,6 +700,9 @@ def candidate_fragment_bridges(
                 "all_failed_reasons": ";".join(failed),
                 "selected": False,
                 "selection_reject_reason": "",
+                "stage1_voxel_support_fraction": float(support_fraction),
+                "stage1_voxel_support_samples": int(support_count),
+                "stage1_voxel_support_total_samples": int(support_total),
             })
             rows.append(m)
     rows.sort(key=lambda r: (
@@ -518,10 +845,11 @@ def _track_endpoint_direction(verts: np.ndarray, end: str) -> np.ndarray:
     v = np.asarray(verts, dtype=float)
     if len(v) < 2:
         return np.array([1.0, 0.0], dtype=float)
+    window = min(4, len(v) - 1)
     if end == "start":
-        d = v[0, :2] - v[min(1, len(v)-1), :2]
+        d = v[0, :2] - v[window, :2]
     else:
-        d = v[-1, :2] - v[max(0, len(v)-2), :2]
+        d = v[-1, :2] - v[-1-window, :2]
     n = float(np.linalg.norm(d))
     return d / n if n > 1e-12 else np.array([1.0, 0.0], dtype=float)
 
@@ -529,17 +857,26 @@ def _track_endpoint_direction(verts: np.ndarray, end: str) -> np.ndarray:
 def _pole_attachment_candidate(
     endpoint_vox: np.ndarray,
     outward_axis_xy: np.ndarray,
+    pole_support_voxels: np.ndarray,
     poles: pd.DataFrame | None,
     voxel_size_ft: float,
     profile: dict[str, Any],
 ) -> dict[str, Any] | None:
-    if poles is None or poles.empty:
+    if poles is None or poles.empty or not len(pole_support_voxels):
         return None
-    max_dist = float(profile["pole_attach_radius_ft"])
     max_angle = float(profile["pole_attach_max_angle_deg"])
     min_height_frac = float(profile["pole_attach_min_height_fraction"])
-    standoff_min = float(profile.get("pole_surface_standoff_min_ft", 0.5))
     p = np.asarray(endpoint_vox, dtype=float)
+    pole_voxels = np.asarray(pole_support_voxels, dtype=float)
+    delta = pole_voxels - p
+    contact_max = float(profile.get("pole_contact_max_chebyshev_vox", 1.0))
+    contact_mask = (
+        (np.max(np.abs(delta), axis=1) <= contact_max + 1.0e-12)
+        & (np.linalg.norm(delta, axis=1) > 1.0e-12)
+    )
+    contacts = pole_voxels[contact_mask]
+    if not len(contacts):
+        return None
     best = None
     for r in poles.itertuples(index=False):
         bx, by, bz = float(r.base_x), float(r.base_y), float(r.base_z)
@@ -547,68 +884,229 @@ def _pole_attachment_candidate(
         zlo, zhi = min(bz, tz), max(bz, tz)
         if zhi - zlo <= 1e-9:
             continue
-        frac = (float(p[2]) - zlo) / (zhi - zlo)
-        if frac < min_height_frac or frac > 1.10:
-            continue
-        u = float(np.clip((float(p[2]) - bz) / (tz - bz) if abs(tz-bz) > 1e-9 else 1.0, 0.0, 1.0))
-        pole_xy = np.array([bx + u*(tx-bx), by + u*(ty-by)], dtype=float)
-        to_pole_vox = pole_xy - p[:2]
-        h_ft = float(np.linalg.norm(to_pole_vox) * float(voxel_size_ft))
-        if h_ft > max_dist or h_ft <= 1e-9:
-            continue
-        angle = _angle_deg(outward_axis_xy, to_pole_vox)
-        if angle > max_angle:
-            continue
-        radius_ft = max(standoff_min, float(getattr(r, "radius_p90_ft", standoff_min)))
-        radial = (p[:2] - pole_xy)
-        nr = float(np.linalg.norm(radial))
-        if nr <= 1e-12:
-            radial = -outward_axis_xy
-            nr = float(np.linalg.norm(radial))
-        radial /= max(nr, 1e-12)
-        anchor_xy = pole_xy + radial * (radius_ft / float(voxel_size_ft))
-        anchor = np.array([anchor_xy[0], anchor_xy[1], p[2]], dtype=float)
-        rec = {
-            "pole_component_id": str(getattr(r, "component_id", "")),
-            "endpoint_distance_to_pole_axis_ft": h_ft,
-            "endpoint_to_pole_angle_deg": angle,
-            "attachment_height_fraction": float(frac),
-            "anchor_x": float(anchor[0]),
-            "anchor_y": float(anchor[1]),
-            "anchor_z": float(anchor[2]),
-            "pole_surface_radius_ft": radius_ft,
-            "anchor": anchor,
-        }
-        if best is None or (h_ft, angle) < (best[0], best[1]):
-            best = (h_ft, angle, rec)
-    return None if best is None else best[2]
+        for contact in contacts:
+            frac = (float(contact[2]) - zlo) / (zhi - zlo)
+            if frac < min_height_frac or frac > 1.10:
+                continue
+            u = float(np.clip((float(contact[2])-bz)/(tz-bz), 0.0, 1.0))
+            pole_xy = np.array([bx + u*(tx-bx), by + u*(ty-by)], dtype=float)
+            axis_distance_ft = float(np.linalg.norm(contact[:2] - pole_xy) * voxel_size_ft)
+            radius_ft = max(float(profile.get("pole_surface_standoff_min_ft", 0.5)),
+                            float(getattr(r, "radius_p90_ft", 0.5)))
+            if axis_distance_ft > radius_ft + math.sqrt(2.0) * voxel_size_ft:
+                continue
+            to_contact_xy = contact[:2] - p[:2]
+            angle = 0.0 if np.linalg.norm(to_contact_xy) <= 1.0e-12 else _angle_deg(outward_axis_xy, to_contact_xy)
+            if angle > max_angle:
+                continue
+            contact_distance = float(np.linalg.norm(contact - p))
+            rec = {
+                "pole_component_id": str(getattr(r, "component_id", "")),
+                "endpoint_distance_to_pole_axis_ft": axis_distance_ft,
+                "endpoint_to_pole_angle_deg": angle,
+                "attachment_height_fraction": float(frac),
+                "anchor_x": float(p[0]), "anchor_y": float(p[1]), "anchor_z": float(p[2]),
+                "pole_surface_radius_ft": radius_ft,
+                "contact_pole_voxel_x": float(contact[0]),
+                "contact_pole_voxel_y": float(contact[1]),
+                "contact_pole_voxel_z": float(contact[2]),
+                "contact_distance_vox": contact_distance,
+                "attachment_support_mode": "direct_stage1_line_pole_voxel_contact",
+                "anchor": p.copy(),
+            }
+            rank = (contact_distance, axis_distance_ft, angle, str(rec["pole_component_id"]))
+            if best is None or rank < best[0]:
+                best = (rank, rec)
+    return None if best is None else best[1]
 
 
 def _attach_track_to_poles(
     verts: np.ndarray,
+    pole_support_voxels: np.ndarray,
     poles: pd.DataFrame | None,
     voxel_size_ft: float,
     profile: dict[str, Any],
     component_id: str,
+    used_attachment_keys: set[tuple[str, float, float, float]],
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     v = np.asarray(verts, dtype=float)
     if len(v) < 2 or poles is None or poles.empty:
         return v, []
     rows: list[dict[str, Any]] = []
-    start = _pole_attachment_candidate(v[0], _track_endpoint_direction(v, "start"), poles, voxel_size_ft, profile)
-    end = _pole_attachment_candidate(v[-1], _track_endpoint_direction(v, "end"), poles, voxel_size_ft, profile)
-    out = v.copy()
-    if start is not None:
-        rows.append({"component_id": component_id, "track_end": "start", **{k:v for k,v in start.items() if k != "anchor"}})
-        out = np.vstack([start["anchor"], out])
-    if end is not None:
-        if start is None or str(end["pole_component_id"]) != str(start["pole_component_id"]) or len(v) > 3:
-            rows.append({"component_id": component_id, "track_end": "end", **{k:v for k,v in end.items() if k != "anchor"}})
-            out = np.vstack([out, end["anchor"]])
-    return out, rows
+    for end, endpoint in (("start", v[0]), ("end", v[-1])):
+        candidate = _pole_attachment_candidate(
+            endpoint, _track_endpoint_direction(v, end), pole_support_voxels,
+            poles, voxel_size_ft, profile
+        )
+        if candidate is None:
+            continue
+        key = (str(candidate["pole_component_id"]), round(float(candidate["anchor_x"]), 6),
+               round(float(candidate["anchor_y"]), 6), round(float(candidate["anchor_z"]), 6))
+        if key in used_attachment_keys:
+            continue
+        used_attachment_keys.add(key)
+        rows.append({"component_id": component_id, "track_end": end,
+                     **{k: value for k, value in candidate.items() if k != "anchor"}})
+    return v.copy(), rows
 
 
-def build_electrical_track_outputs(
+
+# V10_SAME_LANE_TERMINAL_MERGE1
+def _merge_same_lane_pole_terminal_groups(
+    groups: list[list[int]],
+    fragments: list[Any],
+    coords: np.ndarray,
+    poles: pd.DataFrame | None,
+    voxel_size_ft: float,
+    profile: dict[str, Any],
+) -> tuple[list[list[int]], int]:
+    """Consolidate only geometrically identical pole-terminal continuations.
+
+    This is not a general near-pole line-to-line bridge. Two groups qualify
+    only when terminal endpoints resolve to the same pole-surface anchor and
+    height, their local axes are parallel, their lateral lane offset is within
+    the learned lane limit, and their endpoint gap is within the learned gap
+    limit. The consolidation occurs before component IDs, vertices, attachment
+    rows, and audit rows are emitted, so all Stage 2 representations agree.
+    """
+    raise RuntimeError("disabled: strict V10 never merges disconnected pole-terminal groups")
+
+    max_gap_ft = float(profile["max_gap_ft"])
+    max_lane_offset_ft = float(profile["max_lane_offset_ft"])
+    max_axis_angle_deg = float(profile["max_axis_angle_deg"])
+    max_vertical_gap_ft = float(profile["max_vertical_gap_ft"])
+    anchor_tolerance_ft = min(1.0e-4, 0.01 * float(voxel_size_ft))
+
+    descriptors: list[list[dict[str, Any]]] = []
+    for group in groups:
+        vox = np.unique(
+            np.concatenate([fragments[g].voxel_indices for g in group])
+        ).astype(np.int64)
+        verts = _ordered_observed_vertices(
+            vox,
+            coords,
+            voxel_size_ft,
+            float(profile.get("vertex_bin_ft", 1.0)),
+        )
+        terminal_rows: list[dict[str, Any]] = []
+        if len(verts) >= 2:
+            for end, endpoint in (("start", verts[0]), ("end", verts[-1])):
+                axis = _track_endpoint_direction(verts, end)
+                attachment = _pole_attachment_candidate(
+                    endpoint, axis, poles, voxel_size_ft, profile
+                )
+                if attachment is not None:
+                    terminal_rows.append({
+                        "end": end,
+                        "endpoint": np.asarray(endpoint, dtype=float),
+                        "axis": np.asarray(axis[:2], dtype=float),
+                        "attachment": attachment,
+                    })
+        descriptors.append(terminal_rows)
+
+    parent = list(range(len(groups)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a: int, b: int) -> bool:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return False
+        if ra > rb:
+            ra, rb = rb, ra
+        parent[rb] = ra
+        return True
+
+    def compatible(a: dict[str, Any], b: dict[str, Any]) -> bool:
+        aa = a["attachment"]
+        bb = b["attachment"]
+        if str(aa["pole_component_id"]) != str(bb["pole_component_id"]):
+            return False
+
+        anchor_delta_ft = float(
+            np.linalg.norm(
+                (np.asarray(aa["anchor"], dtype=float)
+                 - np.asarray(bb["anchor"], dtype=float))
+                * float(voxel_size_ft)
+            )
+        )
+        if anchor_delta_ft > anchor_tolerance_ft:
+            return False
+
+        endpoint_delta = (
+            np.asarray(b["endpoint"], dtype=float)
+            - np.asarray(a["endpoint"], dtype=float)
+        ) * float(voxel_size_ft)
+        gap_ft = float(np.linalg.norm(endpoint_delta))
+        if gap_ft <= 1.0e-9 or gap_ft > max_gap_ft:
+            return False
+        if abs(float(endpoint_delta[2])) > max_vertical_gap_ft:
+            return False
+
+        axis_a = np.asarray(a["axis"], dtype=float)
+        axis_b = np.asarray(b["axis"], dtype=float)
+        na = float(np.linalg.norm(axis_a))
+        nb = float(np.linalg.norm(axis_b))
+        if na <= 1.0e-12 or nb <= 1.0e-12:
+            return False
+        axis_a /= na
+        axis_b /= nb
+        alignment = abs(float(np.dot(axis_a, axis_b)))
+        axis_angle = float(
+            np.degrees(np.arccos(np.clip(alignment, -1.0, 1.0)))
+        )
+        if axis_angle > max_axis_angle_deg:
+            return False
+
+        if float(np.dot(axis_a, axis_b)) < 0.0:
+            axis_b = -axis_b
+        common_axis = axis_a + axis_b
+        common_norm = float(np.linalg.norm(common_axis))
+        if common_norm <= 1.0e-12:
+            common_axis = axis_a
+        else:
+            common_axis /= common_norm
+
+        delta_xy = endpoint_delta[:2]
+        longitudinal = float(np.dot(delta_xy, common_axis))
+        lateral_vec = delta_xy - longitudinal * common_axis
+        lateral_ft = float(np.linalg.norm(lateral_vec))
+        if lateral_ft > max_lane_offset_ft:
+            return False
+
+        # Identical pole-surface point plus same lane/height/axis means these
+        # are fragments of one terminal conductor, not separate conductors.
+        return True
+
+    merge_count = 0
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            should_merge = any(
+                compatible(a, b)
+                for a in descriptors[i]
+                for b in descriptors[j]
+            )
+            if should_merge and union(i, j):
+                merge_count += 1
+
+    if merge_count == 0:
+        return groups, 0
+
+    merged: dict[int, list[int]] = {}
+    for i, group in enumerate(groups):
+        merged.setdefault(find(i), []).extend(group)
+
+    result = [
+        sorted(set(merged[root]))
+        for root in sorted(merged, key=lambda r: min(merged[r]))
+    ]
+    return result, merge_count
+
+def _legacy_unsupported_build_electrical_track_outputs(
     coords: np.ndarray,
     line_scores: np.ndarray,
     labels: np.ndarray,
@@ -619,6 +1117,7 @@ def build_electrical_track_outputs(
     voxel_size_ft: float,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
+    raise RuntimeError("disabled: unsupported chord-based Stage2 implementation")
     c = np.asarray(coords, dtype=np.int32)
     scores = np.asarray(line_scores, dtype=np.float32)
     lab = np.asarray(labels, dtype=np.int8)
@@ -631,6 +1130,9 @@ def build_electrical_track_outputs(
     candidates = candidate_fragment_bridges(fragments, c, voxel_size_ft, profile, poles=poles)
     selected = select_fragment_bridges(fragments, candidates, c, voxel_size_ft, profile)
     groups = _track_groups(len(fragments), selected) if fragments else []
+    groups, pole_terminal_same_lane_merges = _merge_same_lane_pole_terminal_groups(
+        groups, fragments, c, poles, voxel_size_ft, profile
+    )
 
     selected_by_pair = {
         tuple(sorted((int(r["fragment_a"]), int(r["fragment_b"])))): r
@@ -772,6 +1274,7 @@ def build_electrical_track_outputs(
             "raw_stage1_line_components": int(len(components)),
             "joined_stage2_tracks": int(len(line_rows)),
             "selected_fragment_bridges": int(len(selected)),
+            "same_lane_pole_terminal_group_merges": int(pole_terminal_same_lane_merges),
             "max_selected_bridge_gap_ft": float(max_bridge_gap),
             "max_track_radius_p95_ft": float(max_track_radius),
             "unjoined_singleton_line_voxels": int(singleton_voxels),
@@ -788,6 +1291,183 @@ def build_electrical_track_outputs(
             "bridge_requires_stage1_class2_both_sides": True,
             "line_to_line_bridge_near_pole_allowed": False,
             "parallel_lane_merge_allowed": False,
+        },
+    }
+
+
+def build_electrical_track_outputs(
+    coords: np.ndarray,
+    line_scores: np.ndarray,
+    labels: np.ndarray,
+    poles: pd.DataFrame,
+    file_id: str,
+    slice_seq: int,
+    grid_size: tuple[int, int, int],
+    voxel_size_ft: float,
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    """Build only graph-connected, Stage1-voxel-supported open line paths."""
+    c = np.asarray(coords, dtype=np.int32)
+    scores = np.asarray(line_scores, dtype=np.float32)
+    lab = np.asarray(labels, dtype=np.int8)
+    if not (len(c) == len(scores) == len(lab)):
+        raise ValueError("Stage1 electrical-track arrays do not align")
+
+    line_idx, components = connected_components_26(c, lab == 2, grid_size)
+    pole_support_voxels = c[lab == 1].copy()
+    fragments = [describe_fragment(i, idx, c, voxel_size_ft) for i, idx in enumerate(components)]
+    candidates = candidate_fragment_bridges(fragments, c, voxel_size_ft, profile, poles=poles)
+    selected = select_fragment_bridges(fragments, candidates, c, voxel_size_ft, profile)
+    if selected:
+        raise RuntimeError(
+            "strict Stage2 invariant violated: a disconnected-fragment bridge passed voxel support"
+        )
+
+    traces: list[TracedPath] = []
+    for component_index, component in enumerate(components):
+        traces.extend(trace_component_paths(component_index, component, c, profile))
+
+    assigned = (
+        np.concatenate([trace.voxel_indices for trace in traces])
+        if traces else np.empty(0, dtype=np.int64)
+    )
+    if len(assigned) != len(line_idx) or len(np.unique(assigned)) != len(line_idx):
+        raise RuntimeError(
+            f"Stage1 line assignment mismatch: stage1={len(line_idx)} "
+            f"assigned={len(assigned)} unique={len(np.unique(assigned))}"
+        )
+    if set(map(int, assigned)) != set(map(int, line_idx)):
+        raise RuntimeError("Stage1 line assignment changed voxel identity")
+
+    global_support = {_voxel_key(c[int(i)]) for i in line_idx}
+    used_attachment_keys: set[tuple[str, float, float, float]] = set()
+    line_rows: list[dict[str, Any]] = []
+    vertex_rows: list[dict[str, Any]] = []
+    component_rows: list[dict[str, Any]] = []
+    track_rows: list[dict[str, Any]] = []
+    attachment_rows: list[dict[str, Any]] = []
+    line_points: dict[str, np.ndarray] = {}
+    geometry_supported = 0
+    geometry_total = 0
+    max_output_turn = 0.0
+    point_fragments = 0
+    max_track_radius = 0.0
+
+    for track_no, trace in enumerate(traces, 1):
+        vox = np.asarray(trace.voxel_indices, dtype=np.int64)
+        path = np.asarray(trace.path_indices, dtype=np.int64)
+        if not len(vox) or not len(path):
+            raise RuntimeError("empty strict line trace")
+        cid = f"S1E{track_no:05d}"
+        verts = _strictly_simplify_supported_path(c[path], profile)
+        if len(verts) == 1:
+            point_fragments += 1
+        verts, rows = _attach_track_to_poles(
+            verts, pole_support_voxels, poles, voxel_size_ft, profile,
+            cid, used_attachment_keys
+        )
+        attachment_rows.extend(rows)
+
+        supported, total = _polyline_support_counts(verts, global_support)
+        geometry_supported += supported
+        geometry_total += total
+        if supported != total:
+            raise RuntimeError(
+                f"Stage2 line geometry left Stage1 voxel support: component={cid} "
+                f"supported={supported} total={total}"
+            )
+        local_turn = _polyline_max_turn_deg(verts)
+        max_output_turn = max(max_output_turn, local_turn)
+
+        if len(verts) >= 2:
+            deltas_ft = np.diff(verts, axis=0) * float(voxel_size_ft)
+            poly_len = float(np.linalg.norm(deltas_ft, axis=1).sum())
+            direct = (verts[-1] - verts[0]) * float(voxel_size_ft)
+            direct_len = float(np.linalg.norm(direct))
+            horizontal_span = float(np.linalg.norm(direct[:2]))
+            vertical_span = float(abs(direct[2]))
+            verticality = float(vertical_span / max(direct_len, 1.0e-12))
+            tortuosity = float(poly_len / max(direct_len, 1.0e-12))
+        else:
+            horizontal_span = vertical_span = verticality = 0.0
+            tortuosity = 1.0
+
+        descriptor = describe_fragment(trace.source_component_index, vox, c, voxel_size_ft)
+        max_track_radius = max(max_track_radius, float(descriptor.radius_p90_ft))
+        score_mean = float(np.mean(scores[vox]))
+        line_rows.append({
+            "file_id": str(file_id), "component_id": cid, "slice_seq": int(slice_seq),
+            "refiner_probability": float("nan"), "horizontal_span_ft": horizontal_span,
+            "vertical_span_ft": vertical_span, "verticality": verticality,
+            "tortuosity": tortuosity, "vertex_count": int(len(verts)),
+        })
+        for vi, q in enumerate(verts):
+            vertex_rows.append({
+                "file_id": str(file_id), "component_id": cid, "slice_seq": int(slice_seq),
+                "vertex_index": int(vi), "x": float(q[0]), "y": float(q[1]), "z": float(q[2]),
+            })
+        component_rows.append({
+            "component_id": cid, "class_name": "line", "n_voxels": int(len(vox)),
+            "score_mean": score_mean, "component_accept": True,
+            "accept_mode": "stage1_inferred_voxel_supported_open_track",
+            "stage1_line_label_fraction": 1.0, "raw_fragment_count": 1,
+            "bridge_count": 0, "pole_attachment_count": int(len(rows)),
+            "max_bridge_gap_ft": 0.0, "track_radius_p95_ft": float(descriptor.radius_p90_ft),
+            "synthetic_line_voxels": 0, "runtime_gt_usage": False,
+            "source_component_index": int(trace.source_component_index),
+            "file_id": str(file_id), "slice_seq": int(slice_seq),
+        })
+        line_points[cid] = c[vox].copy()
+        track_rows.append({
+            "component_id": cid, "source_component_index": int(trace.source_component_index),
+            "raw_fragment_count": 1, "n_voxels": int(len(vox)),
+            "vertex_count": int(len(verts)), "bridge_count": 0,
+            "pole_attachment_count": int(len(rows)), "max_bridge_gap_ft": 0.0,
+            "track_radius_p95_ft": float(descriptor.radius_p90_ft),
+            "horizontal_span_ft": horizontal_span, "vertical_span_ft": vertical_span,
+            "score_mean": score_mean, "max_turn_deg": float(local_turn),
+            "geometry_support_fraction": 1.0,
+        })
+
+    blocked_support = sum(1 for r in candidates if r.get("reject_reason") == "stage1_voxel_support")
+    return {
+        "lines_rows": line_rows, "vertices_rows": vertex_rows,
+        "components_rows": component_rows, "line_points": line_points,
+        "line_indices": line_idx, "accepted_line_indices": assigned,
+        "raw_components": components, "fragments": fragments,
+        "bridge_candidates": candidates, "selected_bridges": [],
+        "track_rows": track_rows, "pole_attachment_rows": attachment_rows,
+        "audit": {
+            "stage1_inferred_line_voxels": int(len(line_idx)),
+            "accepted_stage1_line_voxels": int(len(assigned)),
+            "stage1_to_stage2_voxel_preservation": 1.0,
+            "raw_stage1_line_components": int(len(components)),
+            "joined_stage2_tracks": int(len(line_rows)),
+            "selected_fragment_bridges": 0,
+            "same_lane_pole_terminal_group_merges": 0,
+            "disconnected_fragment_bridges_allowed": False,
+            "disconnected_bridges_blocked_by_voxel_support": int(blocked_support),
+            "geometry_support_samples": int(geometry_total),
+            "geometry_supported_samples": int(geometry_supported),
+            "geometry_stage1_voxel_support_fraction": 1.0,
+            "geometry_outside_stage1_voxel_samples": 0,
+            "line_path_fragments": int(len(traces)),
+            "point_line_fragments": int(point_fragments),
+            "unjoined_singleton_line_voxels": 0,
+            "max_output_turn_deg": float(max_output_turn),
+            "max_selected_bridge_gap_ft": 0.0,
+            "max_track_radius_p95_ft": float(max_track_radius),
+            "pole_attachments": int(len(attachment_rows)),
+            "pole_attachment_requires_stage1_voxel_contact": True,
+            "attachment_geometry_vertices_added": 0,
+            "runtime_gt_usage": False, "synthetic_line_voxels": 0,
+            "pole_pair_inference": False, "line_refiner_used": False,
+            "line_hysteresis_used": False,
+            "line_geometry_source": "stage1_class2_26_neighbor_graph_supported_paths",
+            "bridge_requires_stage1_class2_both_sides": True,
+            "line_to_line_bridge_near_pole_allowed": False,
+            "parallel_lane_merge_allowed": False,
+            "open_line_endpoints_preserved": True,
         },
     }
 
@@ -862,6 +1542,7 @@ class Stage1ElectricalTrackStage2Processor:
             "stage1_labels": labels,
             "label_source": label_source,
             "line_indices": joined["line_indices"],
+            "accepted_line_indices": joined["accepted_line_indices"],
             "bridge_candidates": joined["bridge_candidates"],
             "selected_bridges": joined["selected_bridges"],
             "track_rows": joined["track_rows"],
