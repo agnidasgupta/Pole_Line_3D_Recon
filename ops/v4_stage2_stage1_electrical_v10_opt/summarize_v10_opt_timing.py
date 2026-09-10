@@ -9,8 +9,8 @@ from pathlib import Path
 
 TIMING_FIELDS = (
     "stage1_load_ms",
-    "production_pole_component_ms",
-    "production_pole_refiner_parametric_ms",
+    "production_component_ms",
+    "production_refiner_parametric_ms",
     "production_stage2_ms",
     "stage1_label_resolve_ms",
     "line_connected_components_ms",

@@ -14,8 +14,13 @@ now=$(date +%s)
 age=$((now-${latest_epoch:-now}))
 echo "RUN_ROOT=$RUN_ROOT"
 echo "ACCEPTED=$accepted FAILED=$failed EQUIVALENT=$equivalent LAST_OUTPUT_AGE_SECONDS=$age"
-if kill -0 "$PID" 2>/dev/null; then
+process_command=""
+if [ -r "/proc/$PID/cmdline" ]; then
+  process_command=$(tr '\0' ' ' < "/proc/$PID/cmdline")
+fi
+if kill -0 "$PID" 2>/dev/null && [[ "$process_command" == *run_v10_stage2_opt_experiment.sh* ]]; then
   echo "STATE=RUNNING"
+  echo "PROCESS_COMMAND=$process_command"
   ps -o pid,ppid,stat,etime,%cpu,%mem,cmd -p "$PID" --ppid "$PID"
   docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}'
   if [ "$age" -gt 900 ]; then

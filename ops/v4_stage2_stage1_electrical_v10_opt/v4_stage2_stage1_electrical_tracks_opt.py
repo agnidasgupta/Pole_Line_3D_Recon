@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-voxel-supported-opt1-20260910"
+STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-voxel-supported-opt1-fix1-20260910"
 
 
 def resolve_deployed_stage1_labels(
@@ -1520,44 +1520,6 @@ class Stage1ElectricalTrackStage2Processor:
         )
         self.production_processor_module = self.production.__class__.__module__
 
-    def _production_poles_only(
-        self,
-        item: dict[str, Any],
-        pred: dict[str, np.ndarray],
-        file_id: str,
-        slice_seq: int,
-    ) -> tuple[dict[str, Any], float, float]:
-        """Run the accepted production pole path while omitting discarded lines."""
-        from v4_sparse_components import extract_sparse_components
-        from v4_stage2_runtime import apply_stage2
-
-        candidate = dict(self.production.candidate)
-        t0 = time.perf_counter()
-        components = extract_sparse_components(
-            item,
-            pred,
-            self.grid,
-            self.voxel,
-            gt_points=None,
-            pole_threshold=float(candidate["pole_threshold"]),
-            line_threshold=float("inf"),
-            line_weak_threshold=float("inf"),
-            line_competition_ratio=float(candidate["line_competition_ratio"]),
-            pole_min_voxels=int(candidate["pole_min_voxels"]),
-            line_min_voxels=int(candidate["line_min_voxels"]),
-            edge_width_vox=int(candidate["edge_width_vox"]),
-        )
-        pole_component_ms = (time.perf_counter() - t0) * 1000.0
-        t0 = time.perf_counter()
-        stage2 = apply_stage2(
-            components, self.production.bundle, file_id, slice_seq, self.voxel
-        )
-        pole_refiner_parametric_ms = (time.perf_counter() - t0) * 1000.0
-        return {
-            "raw_components": components,
-            **stage2,
-        }, float(pole_component_ms), float(pole_refiner_parametric_ms)
-
     def process(
         self,
         item: dict[str, Any],
@@ -1566,10 +1528,18 @@ class Stage1ElectricalTrackStage2Processor:
         slice_seq: int = 0,
     ) -> dict[str, Any]:
         from v4_stage2_runtime import LINE_OUTPUT_COLUMNS, VERTEX_OUTPUT_COLUMNS
-        baseline, pole_component_ms, pole_refiner_parametric_ms = self._production_poles_only(
-            item, pred, file_id, slice_seq
+        # Quality-critical production extraction is intentionally identical to
+        # accepted commit ed852df.  The earlier pole-only shortcut is removed:
+        # equivalence testing showed serialized pole/component differences.
+        production_t0 = time.perf_counter()
+        baseline = self.production.process(item, pred, file_id, slice_seq)
+        baseline_ms = (time.perf_counter() - production_t0) * 1000.0
+        production_component_ms = float(
+            baseline.get("timing", {}).get("stage2_component_ms", float("nan"))
         )
-        baseline_ms = pole_component_ms + pole_refiner_parametric_ms
+        production_refiner_parametric_ms = float(
+            baseline.get("timing", {}).get("stage2_refiner_parametric_ms", float("nan"))
+        )
         label_t0 = time.perf_counter()
         labels, label_source = resolve_deployed_stage1_labels(pred, self.calibration)
         label_resolve_ms = (time.perf_counter() - label_t0) * 1000.0
@@ -1622,8 +1592,8 @@ class Stage1ElectricalTrackStage2Processor:
             },
             "timing": {
                 "production_stage2_ms": float(baseline_ms),
-                "production_pole_component_ms": float(pole_component_ms),
-                "production_pole_refiner_parametric_ms": float(pole_refiner_parametric_ms),
+                "production_component_ms": production_component_ms,
+                "production_refiner_parametric_ms": production_refiner_parametric_ms,
                 "stage1_label_resolve_ms": float(label_resolve_ms),
                 **joined["timing"],
                 "stage1_electrical_track_ms": float(join_ms),
