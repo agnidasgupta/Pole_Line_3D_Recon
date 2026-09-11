@@ -54,7 +54,7 @@ def main():
     lines = [
         "V10 STAGE2 VOXEL-SUPPORTED OPTIMIZATION TIMING",
         "Units: milliseconds; values are arithmetic means per processed slice.",
-        "Quality gate: byte-exact primary Stage2 outputs plus semantic audit equivalence.",
+        "Quality gate: byte-exact line/electrical outputs plus tightly bounded production-pole numeric equivalence.",
         "",
     ]
     for path in paths:

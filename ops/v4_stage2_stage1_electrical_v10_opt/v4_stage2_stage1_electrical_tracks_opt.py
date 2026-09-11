@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-voxel-supported-opt1-fix1-20260910"
+STAGE1_ELECTRICAL_TRACK_RUNTIME_VERSION = "stage1-electrical-tracks-v10-voxel-supported-opt1-fix2-20260910"
 
 
 def resolve_deployed_stage1_labels(

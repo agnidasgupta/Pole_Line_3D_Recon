@@ -39,7 +39,7 @@ group_id() {
 [[ "$SESSION_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "bad SESSION_TIMEOUT_SECONDS"
 [ "$QUALITY_BASELINE_ROOT" != "$RUN_ROOT" ] || fail "optimized run root must differ from quality baseline"
 for path in "$EXP_REPO/.git" "$STAGE1_ROOT" "$BUNDLE" "$CALIBRATION" "$QUALITY_BASELINE_ROOT/STAGE2_ONLY_COMPLETE.txt"; do [ -e "$path" ] || fail "missing $path"; done
-for name in v4_stage2_stage1_electrical_tracks_opt.py run_v4_stage2_stage1_electrical_tracks_opt.py learn_velasco_stage1_electrical_profile_opt.py self_test_stage1_electrical_tracks_opt.py validate_v10_voxel_supported_stage2_opt.py compare_v10_stage2_quality.py summarize_v10_opt_timing.py; do
+for name in v4_stage2_stage1_electrical_tracks_opt.py run_v4_stage2_stage1_electrical_tracks_opt.py learn_velasco_stage1_electrical_profile_opt.py self_test_stage1_electrical_tracks_opt.py self_test_compare_v10_stage2_quality.py validate_v10_voxel_supported_stage2_opt.py compare_v10_stage2_quality.py summarize_v10_opt_timing.py; do
   [ -f "$TOOL_DIR/$name" ] || fail "missing $TOOL_DIR/$name"
 done
 
@@ -70,10 +70,12 @@ docker run --rm \
       /workspace/quality/run_v4_stage2_stage1_electrical_tracks_opt.py \
       /workspace/quality/learn_velasco_stage1_electrical_profile_opt.py \
       /workspace/quality/self_test_stage1_electrical_tracks_opt.py \
+      /workspace/quality/self_test_compare_v10_stage2_quality.py \
       /workspace/quality/validate_v10_voxel_supported_stage2_opt.py \
       /workspace/quality/compare_v10_stage2_quality.py \
       /workspace/quality/summarize_v10_opt_timing.py
     python /workspace/quality/self_test_stage1_electrical_tracks_opt.py
+    python /workspace/quality/self_test_compare_v10_stage2_quality.py
   ' || fail "Docker compile/self-test failed"
 
 mapfile -t MANIFESTS < <(find "$STAGE1_ROOT" -mindepth 2 -maxdepth 2 -type f -name stage1_manifest.csv | sort)
@@ -99,7 +101,7 @@ PROFILE_C="$RUN_C/selection/selected_electrical_profile.json"
 cat > "$RUN_ROOT/RUN_INFO.txt" <<EOF
 created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 layout_contract=v4_stage23_quality/fault_tolerant_v10_<UTC>/stage2/<SID>
-experiment=v10_stage2_behavior_preserving_performance_opt1
+experiment=v10_stage2_behavior_preserving_performance_opt1_fix2
 accepted_stage2_commit=ed852df
 quality_baseline=$QUALITY_BASELINE_ROOT
 repository=$EXP_REPO
