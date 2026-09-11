@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=va-v4-realtime:torch241-cu121
+FROM ${BASE_IMAGE}
+COPY requirements_onnx_export.txt /tmp/requirements_onnx_export.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements_onnx_export.txt

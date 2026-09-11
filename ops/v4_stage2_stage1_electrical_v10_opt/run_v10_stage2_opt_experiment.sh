@@ -2,11 +2,12 @@
 set -uo pipefail
 
 EXP_REPO=${EXP_REPO:-/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10}
-TOOL_DIR="$EXP_REPO/ops/v4_stage2_stage1_electrical_v10"
+TOOL_DIR="$EXP_REPO/ops/v4_stage2_stage1_electrical_v10_opt"
 HOST_OUTPUTS=${HOST_OUTPUTS:-/workspace/voxel_poleline/outputs}
 IMAGE=${IMAGE:-va-v4-realtime:torch241-cu121}
-BASELINE=${BASELINE_RUN_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z}
-STAGE1_ROOT=${STAGE1_ROOT_HOST:-$BASELINE/stage1}
+STAGE1_BASELINE=${BASELINE_RUN_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z}
+STAGE1_ROOT=${STAGE1_ROOT_HOST:-$STAGE1_BASELINE/stage1}
+QUALITY_BASELINE_ROOT=${QUALITY_BASELINE_ROOT:?QUALITY_BASELINE_ROOT is required}
 BUNDLE=${STAGE2_BUNDLE_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_realtime/stage2_refiner/local_refiner_bundle.joblib}
 CALIBRATION=${CALIBRATION_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/precision_v4/full_val/calibration.json}
 RUN_STAMP=${RUN_STAMP:?RUN_STAMP is required}
@@ -36,21 +37,24 @@ group_id() {
 [[ "$RESUME" =~ ^[01]$ ]] || fail "RESUME must be 0 or 1"
 [[ "$EXPECTED_SESSIONS" =~ ^[0-9]+$ ]] || fail "bad EXPECTED_SESSIONS"
 [[ "$SESSION_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "bad SESSION_TIMEOUT_SECONDS"
-for path in "$EXP_REPO/.git" "$STAGE1_ROOT" "$BUNDLE" "$CALIBRATION"; do [ -e "$path" ] || fail "missing $path"; done
-for name in v4_stage2_stage1_electrical_tracks.py run_v4_stage2_stage1_electrical_tracks.py learn_velasco_stage1_electrical_profile.py self_test_stage1_electrical_tracks.py validate_v10_voxel_supported_stage2.py; do
+[ "$QUALITY_BASELINE_ROOT" != "$RUN_ROOT" ] || fail "optimized run root must differ from quality baseline"
+for path in "$EXP_REPO/.git" "$STAGE1_ROOT" "$BUNDLE" "$CALIBRATION" "$QUALITY_BASELINE_ROOT/STAGE2_ONLY_COMPLETE.txt"; do [ -e "$path" ] || fail "missing $path"; done
+for name in v4_stage2_stage1_electrical_tracks_opt.py run_v4_stage2_stage1_electrical_tracks_opt.py learn_velasco_stage1_electrical_profile_opt.py self_test_stage1_electrical_tracks_opt.py self_test_compare_v10_stage2_quality.py validate_v10_voxel_supported_stage2_opt.py compare_v10_stage2_quality.py summarize_v10_opt_timing.py; do
   [ -f "$TOOL_DIR/$name" ] || fail "missing $TOOL_DIR/$name"
 done
 
 mkdir -p "$RUN_ROOT"/{stage2,stage3,selection,logs/stage2,logs/stage3,timing/stage2,status}
-printf '%s\n' "$RUN_ROOT" > /home/agni/LATEST_V10_FAULT_TOLERANT_STAGE2_RUN.txt
-printf '%s\n' "$DRIVER_LOG" > /home/agni/LATEST_V10_FAULT_TOLERANT_STAGE2_LOG.txt
+printf '%s\n' "$RUN_ROOT" > /home/agni/LATEST_V10_STAGE2_OPT_RUN.txt
+printf '%s\n' "$DRIVER_LOG" > /home/agni/LATEST_V10_STAGE2_OPT_DRIVER_LOG.txt
+printf '%s\n' "$QUALITY_BASELINE_ROOT" > /home/agni/LATEST_V10_STAGE2_OPT_BASELINE.txt
 
 exec > >(tee -a "$DRIVER_LOG") 2>&1
 echo "============================================================"
-echo "V10 STRICT VOXEL-SUPPORTED FAULT-TOLERANT STAGE 2"
+echo "V10 STRICT VOXEL-SUPPORTED STAGE 2 PERFORMANCE EXPERIMENT"
 echo "============================================================"
 echo "run_stamp=$RUN_STAMP"
 echo "run_root=$RUN_ROOT"
+echo "quality_baseline=$QUALITY_BASELINE_ROOT"
 echo "resume=$RESUME"
 echo "session_timeout_seconds=$SESSION_TIMEOUT_SECONDS"
 
@@ -62,12 +66,16 @@ docker run --rm \
   -e PYTHONPYCACHEPREFIX=/tmp/pycache "$IMAGE" bash -lc '
     set -euo pipefail
     python -m py_compile \
-      /workspace/quality/v4_stage2_stage1_electrical_tracks.py \
-      /workspace/quality/run_v4_stage2_stage1_electrical_tracks.py \
-      /workspace/quality/learn_velasco_stage1_electrical_profile.py \
-      /workspace/quality/self_test_stage1_electrical_tracks.py \
-      /workspace/quality/validate_v10_voxel_supported_stage2.py
-    python /workspace/quality/self_test_stage1_electrical_tracks.py
+      /workspace/quality/v4_stage2_stage1_electrical_tracks_opt.py \
+      /workspace/quality/run_v4_stage2_stage1_electrical_tracks_opt.py \
+      /workspace/quality/learn_velasco_stage1_electrical_profile_opt.py \
+      /workspace/quality/self_test_stage1_electrical_tracks_opt.py \
+      /workspace/quality/self_test_compare_v10_stage2_quality.py \
+      /workspace/quality/validate_v10_voxel_supported_stage2_opt.py \
+      /workspace/quality/compare_v10_stage2_quality.py \
+      /workspace/quality/summarize_v10_opt_timing.py
+    python /workspace/quality/self_test_stage1_electrical_tracks_opt.py
+    python /workspace/quality/self_test_compare_v10_stage2_quality.py
   ' || fail "Docker compile/self-test failed"
 
 mapfile -t MANIFESTS < <(find "$STAGE1_ROOT" -mindepth 2 -maxdepth 2 -type f -name stage1_manifest.csv | sort)
@@ -83,7 +91,7 @@ docker run --rm \
   --mount "type=bind,source=$TOOL_DIR,target=/workspace/quality,readonly" \
   --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
   --workdir /workspace/v4 -e PYTHONPATH=/workspace/v4:/workspace/quality \
-  "$IMAGE" python /workspace/quality/learn_velasco_stage1_electrical_profile.py \
+  "$IMAGE" python /workspace/quality/learn_velasco_stage1_electrical_profile_opt.py \
   --stage1_dir "$PROFILE_STAGE1_C" --calibration_json "$CALIBRATION_C" \
   --session_filter "$PROFILE_GID" --reference_min 0 --reference_max 19 \
   --fragment_min 20 --fragment_max 39 --output_dir "$RUN_C/selection" \
@@ -93,6 +101,9 @@ PROFILE_C="$RUN_C/selection/selected_electrical_profile.json"
 cat > "$RUN_ROOT/RUN_INFO.txt" <<EOF
 created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 layout_contract=v4_stage23_quality/fault_tolerant_v10_<UTC>/stage2/<SID>
+experiment=v10_stage2_behavior_preserving_performance_opt1_fix2
+accepted_stage2_commit=ed852df
+quality_baseline=$QUALITY_BASELINE_ROOT
 repository=$EXP_REPO
 branch=$(git -C "$EXP_REPO" branch --show-current)
 commit=$(git -C "$EXP_REPO" rev-parse HEAD)
@@ -108,6 +119,8 @@ stage3_ran=false
 expected_sessions=$EXPECTED_SESSIONS
 EOF
 
+QUALITY_BASELINE_C=$(host_to_container "$QUALITY_BASELINE_ROOT")
+
 : > "$RUN_ROOT/session_map.tsv"
 accepted=0
 failed=0
@@ -122,6 +135,7 @@ for manifest in "${MANIFESTS[@]}"; do
   ok="$RUN_ROOT/status/$sid.stage2.ok"
   bad="$RUN_ROOT/status/$sid.stage2.failed"
   report="$RUN_ROOT/status/$sid.voxel_support_validation.json"
+  equivalence="$RUN_ROOT/status/$sid.quality_equivalence.json"
   session="$RUN_ROOT/stage2/$sid"
   session_c="$RUN_C/stage2/$sid"
   stage1_session=$(dirname "$manifest")
@@ -131,12 +145,12 @@ for manifest in "${MANIFESTS[@]}"; do
   mkdir -p "$session"
   echo "============================================================"
   echo "SESSION $index/${#MANIFESTS[@]} gid=$gid sid=$sid"
-  if [ "$RESUME" = 1 ] && [ -s "$ok" ] && [ -s "$report" ]; then
+  if [ "$RESUME" = 1 ] && [ -s "$ok" ] && [ -s "$report" ] && [ -s "$equivalence" ]; then
     echo "SESSION_REUSED"
     accepted=$((accepted+1))
     continue
   fi
-  rm -f "$ok" "$bad" "$report"
+  rm -f "$ok" "$bad" "$report" "$equivalence"
   start=$(date +%s)
   set +e
   timeout --signal=TERM --kill-after=120 "$SESSION_TIMEOUT_SECONDS" docker run --rm \
@@ -145,7 +159,7 @@ for manifest in "${MANIFESTS[@]}"; do
     --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
     --workdir /workspace/v4 -e PYTHONPATH=/workspace/v4:/workspace/quality \
     -e PYTHONPYCACHEPREFIX=/tmp/pycache -e MPLCONFIGDIR=/tmp/matplotlib \
-    "$IMAGE" python /workspace/quality/run_v4_stage2_stage1_electrical_tracks.py \
+    "$IMAGE" python /workspace/quality/run_v4_stage2_stage1_electrical_tracks_opt.py \
     --stage1_dir "$stage1_c" --output_dir "$session_c" --session_filter "$gid" \
     --stage2_bundle "$BUNDLE_C" --calibration_json "$CALIBRATION_C" \
     --profile_json "$PROFILE_C" --timing_csv "$timing_c" \
@@ -157,11 +171,30 @@ for manifest in "${MANIFESTS[@]}"; do
     docker run --rm \
       --mount "type=bind,source=$TOOL_DIR,target=/workspace/quality,readonly" \
       --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
-      "$IMAGE" python /workspace/quality/validate_v10_voxel_supported_stage2.py \
+      "$IMAGE" python /workspace/quality/validate_v10_voxel_supported_stage2_opt.py \
       --session-dir "$session_c" --report "$RUN_C/status/$sid.voxel_support_validation.json" \
       >> "$log" 2>&1
     rc=$?
     set -e
+  fi
+  if [ "$rc" -eq 0 ]; then
+    set +e
+    docker run --rm \
+      --mount "type=bind,source=$TOOL_DIR,target=/workspace/quality,readonly" \
+      --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
+      "$IMAGE" python /workspace/quality/compare_v10_stage2_quality.py \
+      --baseline-session "$QUALITY_BASELINE_C/stage2/$sid" \
+      --candidate-session "$session_c" \
+      --report "$RUN_C/status/$sid.quality_equivalence.json" \
+      >> "$log" 2>&1
+    equivalence_rc=$?
+    set -e
+    if [ "$equivalence_rc" -ne 0 ]; then
+      printf 'gid=%s\nsid=%s\nexit_code=%s\nreason=quality_equivalence_failed\nlog=%s\n' "$gid" "$sid" "$equivalence_rc" "$log" > "$bad"
+      echo "QUALITY_EQUIVALENCE_FAILED gid=$gid sid=$sid log=$log"
+      tail -n 80 "$log"
+      exit "$equivalence_rc"
+    fi
   fi
   elapsed=$(( $(date +%s) - start ))
   if [ "$rc" -eq 0 ]; then
@@ -176,13 +209,23 @@ for manifest in "${MANIFESTS[@]}"; do
   fi
 done
 
+docker run --rm \
+  --mount "type=bind,source=$TOOL_DIR,target=/workspace/quality,readonly" \
+  --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
+  "$IMAGE" python /workspace/quality/summarize_v10_opt_timing.py \
+  --timing-dir "$RUN_C/timing/stage2" \
+  --baseline-timing-dir "$QUALITY_BASELINE_C/timing/stage2" \
+  --output "$RUN_C/STAGE2_TIMING_SESSION_AVERAGES.txt" \
+  || fail "timing summary failed"
+
 find "$RUN_ROOT" -type f -printf '%P\t%s\n' | sort > "$RUN_ROOT/FILE_INVENTORY.txt"
 echo "accepted=$accepted failed=$failed expected=$EXPECTED_SESSIONS"
 if [ "$accepted" -eq "$EXPECTED_SESSIONS" ] && [ "$failed" -eq 0 ]; then
   printf 'completed_utc=%s\naccepted=%s\nfailed=0\nstage3_ran=false\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$accepted" > "$RUN_ROOT/PHASE2_STAGE2_OK.txt"
   cp "$RUN_ROOT/PHASE2_STAGE2_OK.txt" "$RUN_ROOT/STAGE2_ONLY_COMPLETE.txt"
-  echo "V10_STRICT_STAGE2_ALL_SESSIONS_OK"
+  find "$RUN_ROOT" -type f ! -name FILE_INVENTORY.txt -printf '%P\t%s\n' | sort > "$RUN_ROOT/FILE_INVENTORY.txt"
+  echo "V10_STAGE2_OPT_ALL_SESSIONS_EQUIVALENT_AND_OK"
   exit 0
 fi
-echo "V10_STRICT_STAGE2_INCOMPLETE"
+echo "V10_STAGE2_OPT_INCOMPLETE"
 exit 1
