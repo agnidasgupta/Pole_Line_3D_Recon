@@ -1,0 +1,18 @@
+V10 UNITY NATIVE SOURCE VERIFICATION
+date_utc=2026-09-13
+scope=source package only
+bash_syntax=PASS
+python_ast_standard_library_tools=PASS
+csharp_delimiter_structure=PASS
+forbidden_runtime_python_process_scan=PASS
+forbidden_runtime_numpy_pandas_joblib_sklearn_scan=PASS
+strict_electrical_invariant_source_checks=PASS
+unity_editor_compile=NOT_RUN_UNITY_NOT_INSTALLED_IN_BUILD_ENVIRONMENT
+sentis_model_execution=NOT_RUN_MODEL_ASSETS_NOT_PRESENT_IN_SOURCE_PACKAGE
+accepted_output_equivalence=REQUIRED_AUTOMATED_GATE_ON_NEBIUS
+
+Release qualification requires:
+1. Unity 6.3 editor compilation and Linux player build success.
+2. Definitive VELASCO_CUT_CP/session1 ordinals 20-39 status=PASS.
+3. All-session status=PASS against the accepted opt1-fix2 reference.
+4. No failed slice/session markers and STAGE12_COMPLETE.txt present.
