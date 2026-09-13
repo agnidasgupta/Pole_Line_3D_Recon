@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -16,7 +17,17 @@ public static class V10Stage12Build
     private const string TreesPath = "Assets/V10Stage12/Models/v10_stage2_refiner_trees.bytes";
     private const string ScenePath = "Assets/V10Stage12/Scenes/V10Stage12Server.unity";
 
-    public static void BuildLinuxServer()
+    public static void BuildLinuxGpuPlayer()
+    {
+        BuildLinux(false);
+    }
+
+    public static void BuildLinuxCpuServer()
+    {
+        BuildLinux(true);
+    }
+
+    private static void BuildLinux(bool dedicatedServer)
     {
         ModelAsset fp32 = Require<ModelAsset>(Fp32Path);
         TextAsset sidecar = Require<TextAsset>(SidecarPath);
@@ -36,8 +47,7 @@ public static class V10Stage12Build
         managerObject.FindProperty("requestFp16").boolValue = false;
         managerObject.FindProperty("unityFp16ParityApproved").boolValue = false;
         managerObject.FindProperty("warmupOnStart").boolValue = true;
-        string buildKind = (Environment.GetEnvironmentVariable("V10_UNITY_BUILD_KIND") ?? "server").ToLowerInvariant();
-        bool dedicatedServer = buildKind != "player";
+        managerObject.FindProperty("batchSize").intValue = 12;
         managerObject.FindProperty("backend").intValue = dedicatedServer
             ? (int)BackendType.CPU : (int)BackendType.GPUCompute;
         managerObject.ApplyModifiedPropertiesWithoutUndo();
@@ -51,7 +61,7 @@ public static class V10Stage12Build
 
         string output = Environment.GetEnvironmentVariable("V10_UNITY_BUILD_OUTPUT");
         if (string.IsNullOrWhiteSpace(output)) output = dedicatedServer
-            ? "Builds/Linux/V10Stage12Server" : "Builds/Linux/V10Stage12GpuPlayer";
+            ? "Builds/Linux/V10Stage12CpuServer" : "Builds/Linux/V10Stage12GpuPlayer";
         Directory.CreateDirectory(Path.GetDirectoryName(output) ?? "Builds/Linux");
         var options = new BuildPlayerOptions
         {
@@ -64,7 +74,10 @@ public static class V10Stage12Build
         BuildReport report = BuildPipeline.BuildPlayer(options);
         if (report.summary.result != BuildResult.Succeeded)
             throw new BuildFailedException("V10 Stage12 server build failed: " + report.summary.result);
-        Debug.Log("V10_STAGE12_NATIVE_BUILD_OK output=" + Path.GetFullPath(output));
+        Debug.Log("V10_STAGE12_NATIVE_BUILD_OK kind=" +
+            (dedicatedServer ? "cpu-server" : "gpu-player") +
+            " backend=" + (dedicatedServer ? BackendType.CPU : BackendType.GPUCompute) +
+            " output=" + Path.GetFullPath(output));
     }
 
     private static T Require<T>(string path) where T : UnityEngine.Object

@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace VegetationAssurance.V10
 {
@@ -91,10 +92,25 @@ namespace VegetationAssurance.V10
                 if (requestFp16 && (!config.onnx.fp16_deployable || !unityFp16ParityApproved))
                     throw new InvalidOperationException("FP16 requires both export and Unity real-slice parity approval.");
                 ModelAsset selected = requestFp16 && fp16ModelAsset != null ? fp16ModelAsset : fp32ModelAsset;
+                if (backend == BackendType.GPUCompute)
+                {
+                    if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
+                        throw new InvalidOperationException(
+                            "GPUCompute requires a graphics device. Do not launch with -nographics.");
+                    if (!SystemInfo.supportsComputeShaders)
+                        throw new InvalidOperationException(
+                            "GPUCompute requires compute-shader support on the active graphics device.");
+                }
                 worker = new Worker(ModelLoader.Load(selected), backend);
                 if (runWarmup) await WarmupLockedAsync();
                 IsReady = true;
-                if (logDiagnostics) Debug.Log("[V10Stage12] initialization complete; backend=" + backend);
+                if (logDiagnostics) Debug.Log(
+                    "[V10Stage12] initialization complete; backend=" + backend +
+                    " graphics_device=" + SystemInfo.graphicsDeviceName +
+                    " graphics_api=" + SystemInfo.graphicsDeviceType +
+                    " compute_shaders=" + SystemInfo.supportsComputeShaders +
+                    " batch_size=" + batchSize +
+                    " precision=" + (requestFp16 ? "fp16" : "fp32"));
             }
             catch
             {

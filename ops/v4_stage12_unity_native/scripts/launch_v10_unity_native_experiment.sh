@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${UNITY_SERVER:?Set UNITY_SERVER to the uploaded V10Stage12Server executable}"
-: "${INPUT_MANIFEST:?Set INPUT_MANIFEST to the Unity input_manifest.csv}"
+: "${UNITY_SERVER:?Set UNITY_SERVER to the uploaded V10Stage12GpuPlayer executable}"
 
 OUTPUTS=/workspace/voxel_poleline/outputs
 STAMP="${RUN_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -11,16 +10,44 @@ LOG="${RUN_LOG:-$RUN_ROOT/UNITY_PLAYER.log}"
 RESUME="${RESUME:-1}"
 EXPECTED_SESSIONS="${EXPECTED_SESSIONS:-30}"
 REFERENCE_ROOT="${REFERENCE_ROOT:-}"
+V10_UNITY_GPU="${V10_UNITY_GPU:-1}"
+
+input_count=0
+[[ -n "${INPUT_MANIFEST:-}" ]] && input_count=$((input_count+1))
+[[ -n "${INPUT_CSV:-}" ]] && input_count=$((input_count+1))
+[[ -n "${INPUT_DIRECTORY:-}" ]] && input_count=$((input_count+1))
+[[ "$input_count" -eq 1 ]] || {
+  echo "ERROR: set exactly one of INPUT_MANIFEST, INPUT_CSV, or INPUT_DIRECTORY" >&2
+  exit 1
+}
 
 mkdir -p "$RUN_ROOT"
 args=(
   -batchmode
-  --v10-manifest "$INPUT_MANIFEST"
   --v10-run-root "$RUN_ROOT"
   --v10-resume "$RESUME"
   --v10-expected-sessions "$EXPECTED_SESSIONS"
 )
-if [[ "${UNITY_HEADLESS:-1}" == 1 ]]; then
+if [[ -n "${INPUT_MANIFEST:-}" ]]; then
+  args+=(--v10-manifest "$INPUT_MANIFEST")
+elif [[ -n "${INPUT_CSV:-}" ]]; then
+  : "${GROUP_ID:?Set GROUP_ID for raw CSV input}"
+  : "${SLICE_SEQ:?Set SLICE_SEQ for raw CSV input}"
+  args+=(--v10-input-csv "$INPUT_CSV" --v10-group-id "$GROUP_ID" --v10-slice-seq "$SLICE_SEQ")
+  [[ -n "${RELATIVE_PATH:-}" ]] && args+=(--v10-relative-path "$RELATIVE_PATH")
+else
+  : "${GROUP_ID:?Set GROUP_ID for raw input-directory mode}"
+  args+=(--v10-input-directory "$INPUT_DIRECTORY" --v10-group-id "$GROUP_ID")
+  [[ -n "${START_SLICE_SEQ:-}" ]] && args+=(--v10-start-slice-seq "$START_SLICE_SEQ")
+fi
+if [[ "$V10_UNITY_GPU" == 1 ]]; then
+  command -v nvidia-smi >/dev/null || {
+    echo "ERROR: nvidia-smi is unavailable; GPU production launch refused" >&2
+    exit 1
+  }
+  nvidia-smi -L
+  args=(-force-vulkan "${args[@]}")
+else
   args=(-nographics "${args[@]}")
 fi
 if [[ -n "$REFERENCE_ROOT" ]]; then
@@ -47,3 +74,4 @@ fi
 echo "STARTED pid=$pid"
 echo "run_root=$RUN_ROOT"
 echo "log=$LOG"
+echo "gpu_requested=$V10_UNITY_GPU"

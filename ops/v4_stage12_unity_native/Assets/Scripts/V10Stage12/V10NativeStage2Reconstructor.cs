@@ -774,17 +774,17 @@ namespace VegetationAssurance.V10
             for (int local = 0; local < rows.Count; local++)
             {
                 int root = union.Find(local);
-                if (!groups.TryGetValue(root, out List<int> values))
+                if (!groups.TryGetValue(root, out List<int> componentRows))
                 {
-                    values = new List<int>();
-                    groups.Add(root, values);
+                    componentRows = new List<int>();
+                    groups.Add(root, componentRows);
                 }
-                values.Add(rows[local]);
+                componentRows.Add(rows[local]);
             }
-            IEnumerable<int[]> values = groups.Values.Select(v => v.ToArray());
+            IEnumerable<int[]> components = groups.Values.Select(v => v.ToArray());
             return sortBySize
-                ? values.OrderByDescending(v => v.Length).ThenBy(v => v.Min()).ToList()
-                : values.OrderBy(v => v.Min()).ToList();
+                ? components.OrderByDescending(v => v.Length).ThenBy(v => v.Min()).ToList()
+                : components.OrderBy(v => v.Min()).ToList();
         }
 
         private static Int3Key[] BuildNeighborOffsets(bool forwardOnly)

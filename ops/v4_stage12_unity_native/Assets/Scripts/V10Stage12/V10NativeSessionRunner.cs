@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -40,7 +41,10 @@ namespace VegetationAssurance.V10
 
         private async void Start()
         {
-            if (!runWhenCommandLinePresent || !HasArgument("--v10-manifest")) return;
+            if (!runWhenCommandLinePresent ||
+                (!HasArgument("--v10-manifest") &&
+                 !HasArgument("--v10-input-csv") &&
+                 !HasArgument("--v10-input-directory"))) return;
             int code = 1;
             try { code = await RunFromCommandLineAsync(); }
             catch (Exception exception)
@@ -59,7 +63,6 @@ namespace VegetationAssurance.V10
         public async Task<int> RunFromCommandLineAsync()
         {
             Dictionary<string, string> options = Options(Environment.GetCommandLineArgs());
-            string manifestPath = Required(options, "--v10-manifest");
             string runRoot = Path.GetFullPath(Required(options, "--v10-run-root"));
             bool resume = !options.TryGetValue("--v10-resume", out string resumeText) || resumeText != "0";
             int expectedSessions = options.TryGetValue("--v10-expected-sessions", out string countText)
@@ -75,7 +78,7 @@ namespace VegetationAssurance.V10
             V10NativeOutputWriter.AtomicText(Path.Combine(runRoot, "RUNNING.txt"),
                 "pid=" + Process.GetCurrentProcess().Id + "\nstarted_utc=" + DateTime.UtcNow.ToString("O") + "\n");
 
-            List<ManifestRow> rows = ReadManifest(manifestPath);
+            List<ManifestRow> rows = ReadInputs(options);
             string[] sessions = rows.Select(v => v.groupId).Distinct(StringComparer.Ordinal).ToArray();
             if (expectedSessions > 0 && sessions.Length != expectedSessions)
                 throw new InvalidDataException("Session count mismatch: expected=" + expectedSessions + " actual=" + sessions.Length);
@@ -219,6 +222,92 @@ namespace VegetationAssurance.V10
                     .ThenBy(v => v.sliceSeq).ToList();
             }
             return ReadManifestFile(full);
+        }
+
+        private static List<ManifestRow> ReadInputs(Dictionary<string, string> options)
+        {
+            int selected = (options.ContainsKey("--v10-manifest") ? 1 : 0) +
+                (options.ContainsKey("--v10-input-csv") ? 1 : 0) +
+                (options.ContainsKey("--v10-input-directory") ? 1 : 0);
+            if (selected != 1)
+                throw new ArgumentException(
+                    "Specify exactly one of --v10-manifest, --v10-input-csv, or --v10-input-directory.");
+            if (options.TryGetValue("--v10-manifest", out string manifest))
+                return ReadManifest(manifest);
+
+            string groupId = Required(options, "--v10-group-id");
+            string geography = options.TryGetValue("--v10-geography", out string geographyValue)
+                ? geographyValue : "";
+            string session = options.TryGetValue("--v10-session", out string sessionValue)
+                ? sessionValue : "";
+            if (options.TryGetValue("--v10-input-csv", out string csv))
+            {
+                string full = Path.GetFullPath(csv);
+                if (!File.Exists(full)) throw new FileNotFoundException("Raw voxel CSV not found", full);
+                int sequence = int.Parse(Required(options, "--v10-slice-seq"), CultureInfo.InvariantCulture);
+                string relative = options.TryGetValue("--v10-relative-path", out string relativeValue)
+                    ? relativeValue : Path.GetFileName(full);
+                return new List<ManifestRow> { RawRow(full, groupId, sequence, relative, geography, session) };
+            }
+
+            string directory = Path.GetFullPath(Required(options, "--v10-input-directory"));
+            if (!Directory.Exists(directory))
+                throw new DirectoryNotFoundException("Raw voxel input directory not found: " + directory);
+            string[] files = Directory.GetFiles(directory, "*", SearchOption.AllDirectories)
+                .Where(IsRawCsv)
+                .OrderBy(v => v, StringComparer.Ordinal)
+                .ToArray();
+            if (files.Length == 0) throw new FileNotFoundException("No raw CSV or CSV.GZ files under " + directory);
+            int fallbackSequence = options.TryGetValue("--v10-start-slice-seq", out string startText)
+                ? int.Parse(startText, CultureInfo.InvariantCulture) : 0;
+            var output = new List<ManifestRow>(files.Length);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string relative = Path.GetRelativePath(directory, files[i]).Replace('\\', '/');
+                int sequence = TrySliceSequence(relative, out int parsed) ? parsed : fallbackSequence + i;
+                output.Add(RawRow(files[i], groupId, sequence, relative, geography, session));
+            }
+            if (output.Select(v => v.sliceSeq).Distinct().Count() != output.Count)
+                throw new InvalidDataException(
+                    "Raw input filenames produced duplicate slice sequences. Use a manifest with explicit slice_seq values.");
+            return output.OrderBy(v => v.sliceSeq).ToList();
+        }
+
+        private static ManifestRow RawRow(string fullPath, string groupId, int sequence,
+            string relativePath, string geography, string session)
+        {
+            return new ManifestRow
+            {
+                groupId = groupId,
+                sliceSeq = sequence,
+                relativePath = relativePath,
+                sourceCsv = fullPath,
+                source = fullPath,
+                id = Stem(relativePath),
+                geography = geography,
+                session = session,
+                centerX = 0.0,
+                centerY = 0.0,
+                centerZ = 0.0,
+                manifestDirectory = Path.GetDirectoryName(fullPath) ?? "."
+            };
+        }
+
+        private static bool IsRawCsv(string path)
+        {
+            string name = Path.GetFileName(path);
+            if (name.Equals("stage1_manifest.csv", StringComparison.OrdinalIgnoreCase)) return false;
+            return name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith(".csv.gz", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TrySliceSequence(string value, out int sequence)
+        {
+            MatchCollection matches = Regex.Matches(value ?? "", @"(?:slice[_-]?)?(\d+)", RegexOptions.IgnoreCase);
+            if (matches.Count > 0 && int.TryParse(matches[matches.Count - 1].Groups[1].Value,
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence)) return true;
+            sequence = 0;
+            return false;
         }
 
         private static List<ManifestRow> ReadManifestFile(string path)
