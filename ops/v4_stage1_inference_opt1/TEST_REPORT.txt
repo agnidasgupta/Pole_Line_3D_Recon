@@ -1,0 +1,14 @@
+V4 STAGE1 OPT1 SOURCE VALIDATION
+
+Source validation performed 2026-09-14 UTC:
+- all shell entry points passed bash -n;
+- all Python sources passed bytecode compilation without executing imports;
+- no trailing-whitespace errors were found;
+- production v4/ files were not modified;
+- NumPy, pandas, PyTorch, model inference, and quality comparison are invoked only
+  inside Docker by the Nebius experiment launcher.
+
+CUDA/model validation is intentionally pending Nebius because this build workspace has
+no Docker engine or GPU. The Nebius launcher refuses to process data unless all Python
+sources compile in the accepted image and self_test_v4_stage1_opt.py passes on CUDA.
+The first real session must then pass the full baseline comparison before acceptance.
