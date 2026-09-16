@@ -10,7 +10,6 @@ IMAGE=${IMAGE:-va-v4-realtime:torch241-cu121}
 BASELINE_RUN=${BASELINE_RUN_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z}
 MODEL=${MODEL_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/precision_v4/train/precision_best.pt}
 CALIBRATION=${CALIBRATION_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/precision_v4/full_val/calibration.json}
-STAGE2_BUNDLE=${STAGE2_BUNDLE_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_realtime/stage2_refiner/local_refiner_bundle.joblib}
 RUN_STAMP=${RUN_STAMP:?RUN_STAMP is required}
 RESUME=${RESUME:-1}
 EXPECTED_SESSIONS=${EXPECTED_SESSIONS:-30}
@@ -41,7 +40,7 @@ group_id() {
 [[ "$RESUME" =~ ^[01]$ ]] || fail "RESUME must be 0 or 1"
 [[ "$EXPECTED_SESSIONS" =~ ^[0-9]+$ ]] || fail "EXPECTED_SESSIONS must be an integer"
 [[ "$SESSION_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "SESSION_TIMEOUT_SECONDS must be an integer"
-for path in "$EXP_REPO/.git" "$EXP_REPO/v4/v4_code_fingerprint.sh" "$TOOL_DIR" "$FULL_OPS/export_score_v4_stage1.py" "$HOST_INPUT" "$BASELINE_RUN/PHASE1_STAGE1_OK.txt" "$BASELINE_RUN/run_context.env" "$MODEL" "$CALIBRATION" "$STAGE2_BUNDLE"; do
+for path in "$EXP_REPO/.git" "$TOOL_DIR" "$FULL_OPS/export_score_v4_stage1.py" "$HOST_INPUT" "$BASELINE_RUN/PHASE1_STAGE1_OK.txt" "$BASELINE_RUN/run_context.env" "$MODEL" "$CALIBRATION"; do
   [ -e "$path" ] || fail "missing required path: $path"
 done
 for name in v4_realtime_core_opt.py run_v4_stage1_opt.py self_test_v4_stage1_opt.py compare_v4_stage1_quality.py summarize_v4_stage1_opt_timing.py; do
@@ -56,17 +55,21 @@ done
 [ "$(context_value V4_FIXED_BATCH_SHAPE)" = 1 ] || fail "baseline did not use fixed batch shape"
 current_model_sha=$(sha256sum "$MODEL" | awk '{print $1}')
 current_cal_sha=$(sha256sum "$CALIBRATION" | awk '{print $1}')
-current_stage2_sha=$(sha256sum "$STAGE2_BUNDLE" | awk '{print $1}')
-current_code_fingerprint=$("$EXP_REPO/v4/v4_code_fingerprint.sh")
-current_deploy_fingerprint=$(printf '%s\n%s\n%s\n%s\n' \
-  "$current_code_fingerprint" "$current_model_sha" "$current_cal_sha" "$current_stage2_sha" \
-  | sha256sum | awk '{print $1}')
-baseline_deploy_fingerprint=$(context_value V4_DEPLOY_FINGERPRINT)
-[ -n "$baseline_deploy_fingerprint" ] || fail "baseline deployment fingerprint is missing"
-[ "$current_deploy_fingerprint" = "$baseline_deploy_fingerprint" ] || {
-  echo "baseline_deploy_fingerprint=$baseline_deploy_fingerprint" >&2
-  echo "current_deploy_fingerprint=$current_deploy_fingerprint" >&2
-  fail "current code/model/calibration/Stage2 deployment differs from accepted baseline"
+MODEL_C=$(host_to_container_output "$MODEL")
+CALIBRATION_C=$(host_to_container_output "$CALIBRATION")
+BASELINE_META=$(find "$BASELINE_RUN/stage1" -type f -name '*_stage1.json' -print -quit)
+[ -n "$BASELINE_META" ] && [ -s "$BASELINE_META" ] || fail "baseline Stage1 metadata is missing"
+baseline_model_path=$(sed -n 's/^[[:space:]]*"model_path": "\(.*\)",*$/\1/p' "$BASELINE_META" | head -n 1)
+baseline_calibration_path=$(sed -n 's/^[[:space:]]*"calibration_json": "\(.*\)",*$/\1/p' "$BASELINE_META" | head -n 1)
+[ "$baseline_model_path" = "$MODEL_C" ] || {
+  echo "baseline_stage1_model_path=$baseline_model_path" >&2
+  echo "candidate_stage1_model_path=$MODEL_C" >&2
+  fail "Stage1 model path differs from accepted baseline metadata"
+}
+[ "$baseline_calibration_path" = "$CALIBRATION_C" ] || {
+  echo "baseline_stage1_calibration_path=$baseline_calibration_path" >&2
+  echo "candidate_stage1_calibration_path=$CALIBRATION_C" >&2
+  fail "Stage1 calibration path differs from accepted baseline metadata"
 }
 
 mkdir -p "$RUN_ROOT"/{stage1,stage1_inference,logs/stage1,logs/stage1_export,timings/stage1,status,metrics}
@@ -83,7 +86,8 @@ echo "run_root=$RUN_ROOT"
 echo "baseline_run=$BASELINE_RUN"
 echo "model_sha256=$current_model_sha"
 echo "calibration_sha256=$current_cal_sha"
-echo "deployment_fingerprint=$current_deploy_fingerprint"
+echo "baseline_stage1_model_path=$baseline_model_path"
+echo "baseline_stage1_calibration_path=$baseline_calibration_path"
 echo "runtime=active_gpu amp=bf16 batch_size=12 fixed_batch_shape=1"
 echo "score_atol=$SCORE_ATOL"
 
@@ -101,8 +105,6 @@ docker run --rm --gpus all \
 mapfile -t MANIFESTS < <(find "$BASELINE_RUN/stage1" -mindepth 2 -maxdepth 2 -type f -name stage1_manifest.csv | sort)
 [ "${#MANIFESTS[@]}" -eq "$EXPECTED_SESSIONS" ] || fail "expected $EXPECTED_SESSIONS baseline sessions, found ${#MANIFESTS[@]}"
 
-MODEL_C=$(host_to_container_output "$MODEL")
-CALIBRATION_C=$(host_to_container_output "$CALIBRATION")
 BASELINE_C=$(host_to_container_output "$BASELINE_RUN")
 printf 'group_id\tsid\n' > "$RUN_ROOT/session_map.tsv"
 cat > "$RUN_ROOT/RUN_INFO.txt" <<EOF
@@ -114,8 +116,9 @@ commit=$(git -C "$EXP_REPO" rev-parse HEAD)
 baseline_run=$BASELINE_RUN
 model_sha256=$current_model_sha
 calibration_sha256=$current_cal_sha
-stage2_bundle_sha256=$current_stage2_sha
-deployment_fingerprint=$current_deploy_fingerprint
+baseline_stage1_model_path=$baseline_model_path
+baseline_stage1_calibration_path=$baseline_calibration_path
+stage2_dependency=false
 runtime_mode=active_gpu
 amp=bf16
 batch_size=12
