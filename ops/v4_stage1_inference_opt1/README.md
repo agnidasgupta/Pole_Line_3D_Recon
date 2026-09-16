@@ -242,7 +242,11 @@ No Python is run on the Mac in this workflow.
 
 Profile only after the 30-session equivalence run is complete. The profiler selects the
 median discovered slice from `VELASCO_CUT_CP/session1`, performs three warm-up iterations,
-and captures five measured iterations. It writes beneath the completed run at
+then starts collection with the CUDA Profiler API for exactly five measured iterations.
+Those iterations remain marked by NVTX ranges inside the report. CUDA Profiler API capture
+avoids version-dependent NVTX-trigger behavior that can finish with
+`No reports were generated`, while also excluding model loading and warm-up from the trace.
+The collection has a 30-minute hard timeout and writes beneath the completed run at
 `profiling/nsight_<UTC>`; it never modifies Stage-1 result artifacts.
 
 First verify that the Docker image contains the Nsight CLIs:

@@ -11,9 +11,11 @@ CALIBRATION=${CALIBRATION_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/
 SESSION_FILTER=${SESSION_FILTER:-VELASCO_CUT_CP/session1}
 RUN_NCU=${RUN_NCU:-0}
 NSYS_SET=${NSYS_SET:-cuda,nvtx,osrt}
+PROFILE_TIMEOUT_SECONDS=${PROFILE_TIMEOUT_SECONDS:-1800}
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [ "$RUN_NCU" = 0 ] || [ "$RUN_NCU" = 1 ] || fail "RUN_NCU must be 0 or 1"
+[[ "$PROFILE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "PROFILE_TIMEOUT_SECONDS must be an integer"
 for path in "$TOOL_DIR/profile_v4_stage1_opt.py" "$TOOL_DIR/inventory_v4_stage1_model.py" "$HOST_INPUT" "$MODEL" "$CALIBRATION"; do
   [ -e "$path" ] || fail "missing required path: $path"
 done
@@ -68,19 +70,31 @@ profile_args=(
   --output_json "$PROFILE_C/PROFILE_SUMMARY.json" --warmup 3 --iterations 5
 )
 
+timeout --signal=TERM --kill-after=60 "$PROFILE_TIMEOUT_SECONDS" \
 docker run "${common[@]}" "$IMAGE" "$nsys_bin" profile \
   --trace="$NSYS_SET" --sample=none --cpuctxsw=none \
-  --capture-range=nvtx --nvtx-capture=stage1_opt_profile \
-  --capture-range-end=stop --force-overwrite=true \
+  --capture-range=cudaProfilerApi --capture-range-end=stop \
+  --force-overwrite=true \
   --output="$PROFILE_C/stage1_opt_nsys" "${profile_args[@]}" \
   2>&1 | tee "$PROFILE_ROOT/NSYS_PROFILE.log"
 
-docker run --rm \
+[ -s "$PROFILE_ROOT/stage1_opt_nsys.nsys-rep" ] || \
+  fail "Nsight Systems completed without creating stage1_opt_nsys.nsys-rep"
+
+if ! docker run --rm \
   --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
   "$IMAGE" "$nsys_bin" stats --force-export=true \
   --report nvtx_sum,cuda_api_sum,cuda_gpu_kern_sum,cuda_gpu_mem_time_sum \
   --format column "$PROFILE_C/stage1_opt_nsys.nsys-rep" \
-  > "$PROFILE_ROOT/NSYS_STATS.txt"
+  > "$PROFILE_ROOT/NSYS_STATS.txt"; then
+  echo "WARNING: requested stats set unsupported; using Nsight default reports" \
+    > "$PROFILE_ROOT/NSYS_STATS.txt"
+  docker run --rm \
+    --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
+    "$IMAGE" "$nsys_bin" stats --force-export=true --format column \
+    "$PROFILE_C/stage1_opt_nsys.nsys-rep" \
+    >> "$PROFILE_ROOT/NSYS_STATS.txt" 2>&1 || true
+fi
 
 if [ "$RUN_NCU" = 1 ]; then
   docker run "${common[@]}" "$IMAGE" "$ncu_bin" \

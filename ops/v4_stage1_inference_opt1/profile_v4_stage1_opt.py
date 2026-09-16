@@ -67,6 +67,7 @@ def main():
 
     wall_ms = []
     component_rows = []
+    torch.cuda.cudart().cudaProfilerStart()
     torch.cuda.nvtx.range_push("stage1_opt_profile")
     try:
         for index in range(args.iterations):
@@ -80,6 +81,7 @@ def main():
             component_rows.append(prediction["timing"])
     finally:
         torch.cuda.nvtx.range_pop()
+        torch.cuda.cudart().cudaProfilerStop()
     torch.cuda.synchronize()
 
     keys = sorted({key for row in component_rows for key in row if key.endswith("_ms")})
