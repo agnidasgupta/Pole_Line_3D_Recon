@@ -10,6 +10,23 @@ V9 successfully connected fragmented Stage1 class-2 line voxels, but its bridge 
 2. V9 allowed enough lateral/angle tolerance for a nearby parallel or converging line to be mistaken for the continuation.
 3. V9 had no pole-neighborhood topology rule, so two lines approaching the same pole could be joined to each other before reaching the pole.
 
+## Reconstruction method overview
+
+Stage2 reads the deployed Stage1 sparse artifacts and reconstructs lines only from voxels
+resolved as electrical-line class `2`; the accepted production pole components are
+preserved. Line voxels are partitioned into deterministic 26-neighbor connected components,
+converted to voxel-adjacency graphs, and covered by ordered graph-diameter paths. Sharp
+turns split a path, and every source line voxel is assigned to exactly one emitted track.
+
+Path vertices are simplified only when every sampled chord remains inside the inferred
+Stage1 line-voxel support. Disconnected components are never bridged, no synthetic line
+voxels are introduced, and a line endpoint may attach to a pole only at direct inferred
+line/pole voxel contact; attachment points remain distinct between conductors. Per-slice
+audits enforce complete voxel accounting and a `1.0` geometry-support fraction. The opt1
+implementation preserves this geometry exactly while removing prohibited pairwise bridge
+work, indexing pole contacts with a voxel hash, and deferring descriptors that do not affect
+track construction.
+
 ## V10 electrical rules
 
 - Runtime starts only from deployed Stage1 `label == 2` voxels.
