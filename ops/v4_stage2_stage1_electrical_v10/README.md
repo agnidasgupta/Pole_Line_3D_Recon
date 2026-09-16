@@ -1,68 +1,86 @@
 # V4 Stage2 Stage1 Electrical Tracks V10
 
-Stage2-only experiment. Production `v4/` remains unchanged. Stage1 is not rerun and Stage3 is not run.
+Accepted reference implementation of the strict, voxel-supported V10 Stage 2 electrical-line reconstruction.
+
+This is a Stage2-only workflow. It consumes saved Stage1 sparse inference artifacts, does not rerun Stage1, does not run Stage3, and leaves production `v4/` unchanged. This directory contains no ONNX export path.
+
+The behavior-preserving Opt1 performance experiment is documented separately in [`../v4_stage2_stage1_electrical_v10_opt/README.md`](../v4_stage2_stage1_electrical_v10_opt/README.md).
 
 ## Why V10
 
-V9 successfully connected fragmented Stage1 class-2 line voxels, but its bridge selection could merge two nearby conductors. The defect had three parts:
+Earlier V9 fragment bridging could merge nearby conductors. It selected among fragment endpoints using permissive geometric tolerances and lacked a sufficiently strict pole-neighborhood topology rule. In particular, nearby parallel or converging conductors could be mistaken for one continuation.
 
-1. V9 chose the shortest of four fragment-endpoint combinations rather than requiring true end-to-end continuation.
-2. V9 allowed enough lateral/angle tolerance for a nearby parallel or converging line to be mistaken for the continuation.
-3. V9 had no pole-neighborhood topology rule, so two lines approaching the same pole could be joined to each other before reaching the pole.
+The accepted strict V10 model therefore does not bridge disconnected Stage1 line components. Candidate-bridge diagnostics may still be emitted by the reference implementation, but no disconnected bridge may be selected into output geometry.
 
-## Reconstruction method overview
+## Reconstruction method
 
-Stage2 reads the deployed Stage1 sparse artifacts and reconstructs lines only from voxels
-resolved as electrical-line class `2`; the accepted production pole components are
-preserved. Line voxels are partitioned into deterministic 26-neighbor connected components,
-converted to voxel-adjacency graphs, and covered by ordered graph-diameter paths. Sharp
-turns split a path, and every source line voxel is assigned to exactly one emitted track.
+Stage 2 resolves the deployed Stage1 sparse predictions and reconstructs electrical lines only from voxels assigned class `2`. The accepted production pole extraction remains unchanged.
 
-Path vertices are simplified only when every sampled chord remains inside the inferred
-Stage1 line-voxel support. Disconnected components are never bridged, no synthetic line
-voxels are introduced, and a line endpoint may attach to a pole only at direct inferred
-line/pole voxel contact; attachment points remain distinct between conductors. Per-slice
-audits enforce complete voxel accounting and a `1.0` geometry-support fraction. The opt1
-implementation preserves this geometry exactly while removing prohibited pairwise bridge
-work, indexing pole contacts with a voxel hash, and deferring descriptors that do not affect
-track construction.
+For each slice, reconstruction:
 
-## V10 electrical rules
+1. Selects the Stage1 class-2 line voxels.
+2. Partitions them into deterministic 26-neighbor connected components.
+3. Converts each component into a voxel-adjacency graph.
+4. Extracts ordered graph-diameter paths and splits them at sharp turns.
+5. Partitions branch voxels so every inferred line voxel belongs to exactly one emitted track.
+6. Simplifies path vertices only when sampled chords remain entirely inside the inferred Stage1 line-voxel support.
+7. Attaches a line endpoint to a pole only when inferred line and pole voxels make direct contact.
+8. Audits voxel identity, assignment completeness, topology and geometry support.
 
-- Runtime starts only from deployed Stage1 `label == 2` voxels.
+The reconstruction does not create synthetic line voxels. Separate conductors remain separate components, including when they independently contact the same pole. Their pole-attachment points remain distinct.
+
+## Strict electrical and geometry rules
+
+- Runtime line geometry starts only from deployed Stage1 `label == 2` voxels.
 - Production pole detections are preserved.
-- Same-line bridges require longitudinal end-to-end continuation.
-- Longitudinally overlapping fragments cannot be merged.
-- Signed lane-center displacement is tightly bounded.
-- Each fragment endpoint side can be used by at most one bridge.
-- A tentative merged track must remain within the learned single-conductor lateral radius.
-- Any line-to-line bridge passing through a detected pole neighborhood is forbidden.
-- Separate conductor tracks may independently attach to the detected pole surface.
-- Pole attachments use distinct surface points based on each line's approach direction/height; tracks remain separate components.
-- No pole-pair enumeration.
-- No runtime GT.
-- No synthetic line voxels.
+- Disconnected Stage1 line components are never bridged.
+- Every inferred line voxel is assigned to exactly one output track.
+- Simplified geometry must have a Stage1 voxel-support fraction of `1.0`.
+- Line-to-pole attachment requires direct inferred line/pole voxel contact.
+- Separate conductor tracks may independently attach to the same pole surface.
+- Pole attachments use distinct surface points derived from each track's contact and approach.
+- No pole-pair enumeration is used.
+- No runtime ground truth is used.
+- No synthetic line voxels are introduced.
+- Open line endpoints are preserved when no supported pole contact exists.
+
+## Main entry points
+
+- `v4_stage2_stage1_electrical_tracks.py` — reference reconstruction implementation.
+- `run_v4_stage2_stage1_electrical_tracks.py` — per-session Stage 2 runner.
+- `learn_velasco_stage1_electrical_profile.py` — fixed electrical profile learning from saved Stage1 outputs.
+- `validate_v10_voxel_supported_stage2.py` — independent voxel-support validation.
+- `run_v10_voxel_supported_fault_tolerant_stage2.sh` — fault-tolerant all-session driver.
+- `launch_v10_voxel_supported_all_sessions.sh` — background launcher.
+- `monitor_v10_voxel_supported_stage2.sh` — run monitor.
+- `package_v10_voxel_supported_stage2_results.sh` — validated result packager.
+- `download_v4_stage2_stage1_electrical_v10_to_mac.sh` — result download helper.
 
 ## Output contract
 
-Unchanged:
+The all-session runner writes:
 
-```
-/workspace/voxel_poleline/outputs/poleline_voxel_run_session_groups/v4_stage23_quality/full_run_v2_<UTC>/
-  stage2/<SID>/
-  stage3/                  # reserved, empty
-  selection/
-  logs/stage2/
-  logs/stage3/             # reserved, empty
-  timing/stage2/
-  status/
-  RUN_INFO.txt
-  session_map.tsv
-  PHASE2_STAGE2_OK.txt
-  STAGE2_ONLY_COMPLETE.txt
+```text
+/workspace/voxel_poleline/outputs/poleline_voxel_run_session_groups/
+└── v4_stage23_quality/
+    └── fault_tolerant_v10_<UTC>/
+        ├── stage2/<SID>/
+        ├── stage3/                  # reserved; Stage3 is not run
+        ├── selection/
+        ├── logs/stage2/
+        ├── logs/stage3/             # reserved
+        ├── timing/stage2/
+        ├── status/
+        ├── FILE_INVENTORY.txt
+        ├── RUN_INFO.txt
+        ├── session_map.tsv
+        ├── PHASE2_STAGE2_OK.txt
+        └── STAGE2_ONLY_COMPLETE.txt
 ```
 
-## Diagnostics per slice
+`EXPECTED_SESSIONS` defaults to `30`. Successful completion requires every expected session to finish with no failed-session marker. Each accepted session receives an independent voxel-support validation report.
+
+## Per-slice diagnostics
 
 - `*_stage1_line_voxels.csv`
 - `*_accepted_line_voxels.csv`
@@ -72,11 +90,28 @@ Unchanged:
 - `*_pole_attachments.csv`
 - `*_stage1_electrical_track_audit.json`
 
-Important audit counters include:
+Important audit fields include:
 
-- `parallel_or_cross_lane_bridges_blocked`
-- `near_pole_line_to_line_bridges_blocked`
-- `track_drift_bridges_blocked`
+- `stage1_inferred_line_voxels`
+- `accepted_stage1_line_voxels`
+- `stage1_to_stage2_voxel_preservation`
+- `selected_fragment_bridges`
+- `geometry_stage1_voxel_support_fraction`
+- `geometry_outside_stage1_voxel_samples`
 - `pole_attachments`
+- `runtime_gt_usage`
+- `synthetic_line_voxels`
+- `disconnected_fragment_bridges_allowed`
 
-Run the target session first, inspect Velasco ordinals 20-39, then run all saved sessions only after the target looks electrically correct.
+## Validation and packaging
+
+Before an all-session run, the driver compiles the Python files, runs `self_test_stage1_electrical_tracks.py`, learns the fixed Velasco profile and validates each completed session independently.
+
+The packager requires:
+
+- `STAGE2_ONLY_COMPLETE.txt`;
+- 30 accepted-session markers;
+- zero failed-session markers; and
+- 30 voxel-support validation reports.
+
+Only after those gates pass does it create `v10_voxel_supported_stage2_results_<UTC>.tar.gz`, its SHA-256 file and `/home/agni/LATEST_V10_VOXEL_SUPPORTED_STAGE2_ARCHIVE.txt`.
