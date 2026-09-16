@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-EXP_REPO=${EXP_REPO:-/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10}
-TOOL_DIR="$EXP_REPO/ops/v4_stage1_inference_opt1"
+TOOL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+EXP_REPO=${EXP_REPO:-$(cd "$TOOL_DIR/../.." && pwd)}
 FULL_OPS="$EXP_REPO/ops/v4_full_dataset"
 HOST_OUTPUTS=${HOST_OUTPUTS:-/workspace/voxel_poleline/outputs}
 HOST_INPUT=${HOST_INPUT:-/data/voxel_csv_combined}
@@ -10,6 +10,7 @@ IMAGE=${IMAGE:-va-v4-realtime:torch241-cu121}
 BASELINE_RUN=${BASELINE_RUN_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z}
 MODEL=${MODEL_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/precision_v4/train/precision_best.pt}
 CALIBRATION=${CALIBRATION_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/precision_v4/full_val/calibration.json}
+STAGE2_BUNDLE=${STAGE2_BUNDLE_HOST:-$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_realtime/stage2_refiner/local_refiner_bundle.joblib}
 RUN_STAMP=${RUN_STAMP:?RUN_STAMP is required}
 RESUME=${RESUME:-1}
 EXPECTED_SESSIONS=${EXPECTED_SESSIONS:-30}
@@ -40,7 +41,7 @@ group_id() {
 [[ "$RESUME" =~ ^[01]$ ]] || fail "RESUME must be 0 or 1"
 [[ "$EXPECTED_SESSIONS" =~ ^[0-9]+$ ]] || fail "EXPECTED_SESSIONS must be an integer"
 [[ "$SESSION_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "SESSION_TIMEOUT_SECONDS must be an integer"
-for path in "$EXP_REPO/.git" "$TOOL_DIR" "$FULL_OPS/export_score_v4_stage1.py" "$HOST_INPUT" "$BASELINE_RUN/PHASE1_STAGE1_OK.txt" "$BASELINE_RUN/run_context.env" "$MODEL" "$CALIBRATION"; do
+for path in "$EXP_REPO/.git" "$EXP_REPO/v4/v4_code_fingerprint.sh" "$TOOL_DIR" "$FULL_OPS/export_score_v4_stage1.py" "$HOST_INPUT" "$BASELINE_RUN/PHASE1_STAGE1_OK.txt" "$BASELINE_RUN/run_context.env" "$MODEL" "$CALIBRATION" "$STAGE2_BUNDLE"; do
   [ -e "$path" ] || fail "missing required path: $path"
 done
 for name in v4_realtime_core_opt.py run_v4_stage1_opt.py self_test_v4_stage1_opt.py compare_v4_stage1_quality.py summarize_v4_stage1_opt_timing.py; do
@@ -53,12 +54,20 @@ done
 [ "$(context_value V4_EVALUATE_ALL_CORES)" = 0 ] || fail "baseline did not use active cores"
 [ "$(context_value V4_GPU_COORD_CHANNELS)" = 1 ] || fail "baseline did not use GPU coordinate channels"
 [ "$(context_value V4_FIXED_BATCH_SHAPE)" = 1 ] || fail "baseline did not use fixed batch shape"
-baseline_model_sha=$(context_value V4_MODEL_SHA256)
-baseline_cal_sha=$(context_value V4_CAL_SHA256)
 current_model_sha=$(sha256sum "$MODEL" | awk '{print $1}')
 current_cal_sha=$(sha256sum "$CALIBRATION" | awk '{print $1}')
-[ "$current_model_sha" = "$baseline_model_sha" ] || fail "model SHA256 differs from accepted baseline"
-[ "$current_cal_sha" = "$baseline_cal_sha" ] || fail "calibration SHA256 differs from accepted baseline"
+current_stage2_sha=$(sha256sum "$STAGE2_BUNDLE" | awk '{print $1}')
+current_code_fingerprint=$("$EXP_REPO/v4/v4_code_fingerprint.sh")
+current_deploy_fingerprint=$(printf '%s\n%s\n%s\n%s\n' \
+  "$current_code_fingerprint" "$current_model_sha" "$current_cal_sha" "$current_stage2_sha" \
+  | sha256sum | awk '{print $1}')
+baseline_deploy_fingerprint=$(context_value V4_DEPLOY_FINGERPRINT)
+[ -n "$baseline_deploy_fingerprint" ] || fail "baseline deployment fingerprint is missing"
+[ "$current_deploy_fingerprint" = "$baseline_deploy_fingerprint" ] || {
+  echo "baseline_deploy_fingerprint=$baseline_deploy_fingerprint" >&2
+  echo "current_deploy_fingerprint=$current_deploy_fingerprint" >&2
+  fail "current code/model/calibration/Stage2 deployment differs from accepted baseline"
+}
 
 mkdir -p "$RUN_ROOT"/{stage1,stage1_inference,logs/stage1,logs/stage1_export,timings/stage1,status,metrics}
 printf '%s\n' "$RUN_ROOT" > /home/agni/LATEST_V4_STAGE1_OPT_RUN.txt
@@ -74,6 +83,7 @@ echo "run_root=$RUN_ROOT"
 echo "baseline_run=$BASELINE_RUN"
 echo "model_sha256=$current_model_sha"
 echo "calibration_sha256=$current_cal_sha"
+echo "deployment_fingerprint=$current_deploy_fingerprint"
 echo "runtime=active_gpu amp=bf16 batch_size=12 fixed_batch_shape=1"
 echo "score_atol=$SCORE_ATOL"
 
@@ -104,6 +114,8 @@ commit=$(git -C "$EXP_REPO" rev-parse HEAD)
 baseline_run=$BASELINE_RUN
 model_sha256=$current_model_sha
 calibration_sha256=$current_cal_sha
+stage2_bundle_sha256=$current_stage2_sha
+deployment_fingerprint=$current_deploy_fingerprint
 runtime_mode=active_gpu
 amp=bf16
 batch_size=12

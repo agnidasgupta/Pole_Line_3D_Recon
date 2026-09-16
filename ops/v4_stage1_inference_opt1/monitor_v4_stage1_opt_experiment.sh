@@ -2,6 +2,7 @@
 set -u
 PID_FILE=/home/agni/LATEST_V4_STAGE1_OPT_PID.txt
 RUN_FILE=/home/agni/LATEST_V4_STAGE1_OPT_RUN.txt
+LAUNCH_FILE=/home/agni/LATEST_V4_STAGE1_OPT_LAUNCH_LOG.txt
 [ -s "$PID_FILE" ] && [ -s "$RUN_FILE" ] || { echo "NO_LATEST_STAGE1_OPT_POINTERS"; exit 2; }
 PID=$(tr -cd '0-9' < "$PID_FILE")
 RUN_ROOT=$(head -n 1 "$RUN_FILE")
@@ -43,7 +44,21 @@ echo "===== CURRENT PROGRESS ====="
 find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.progress.json' -printf '%T@ %p\n' 2>/dev/null \
   | sort -nr | head -1 | cut -d' ' -f2- | xargs -r cat
 echo
+echo "===== RECENT LAUNCH LOG ====="
+if [ -s "$LAUNCH_FILE" ]; then
+  LAUNCH_LOG=$(head -n 1 "$LAUNCH_FILE")
+  echo "LAUNCH_LOG=$LAUNCH_LOG"
+  tail -n 100 "$LAUNCH_LOG" 2>/dev/null || true
+else
+  echo "LAUNCH_LOG_POINTER_MISSING"
+fi
 echo "===== RECENT DRIVER LOG ====="
 tail -n 100 "$DRIVER" 2>/dev/null || true
 echo "===== FAILURE SIGNALS ====="
-grep -nEi 'ERROR|Traceback|RuntimeError|timed out|SESSION_REJECTED|INCOMPLETE|mismatch|stalled|killed|out of memory' "$DRIVER" 2>/dev/null | tail -n 80 || true
+if [ -n "${LAUNCH_LOG:-}" ]; then
+  grep -nEi 'ERROR|Traceback|RuntimeError|timed out|SESSION_REJECTED|INCOMPLETE|mismatch|stalled|killed|out of memory' \
+    "$LAUNCH_LOG" "$DRIVER" 2>/dev/null | tail -n 80 || true
+else
+  grep -nEi 'ERROR|Traceback|RuntimeError|timed out|SESSION_REJECTED|INCOMPLETE|mismatch|stalled|killed|out of memory' \
+    "$DRIVER" 2>/dev/null | tail -n 80 || true
+fi
