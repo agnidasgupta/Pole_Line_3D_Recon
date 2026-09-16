@@ -5,8 +5,9 @@ model, training code, checkpoint, calibration, thresholds, output writers, or St
 
 ## Fixed quality contract
 
-- accepted `precision_best.pt` and `calibration.json`, verified by SHA-256 against the
-  accepted full-data run;
+- the same `precision_best.pt` and `calibration.json` paths recorded by the accepted
+  full-data run; their current SHA-256 values are recorded in the experiment, and
+  output equivalence is established independently for every session;
 - CUDA `active_gpu` execution, BF16, batch size 12, fixed batch shape;
 - 64 x 64 x 64 input patches and 48 x 48 x 48 output cores;
 - identical active-core order and identical occupied-row order;
@@ -33,6 +34,64 @@ score difference stops promotion.
 The reusable workspace is session-local and is reset when its shape/device contract
 changes. A failed slice cannot leave stale occupied voxels because its live coordinate
 set is recorded immediately after scatter and cleared before the next slice.
+
+## Inference model architecture
+
+The accepted checkpoint is a compact 3D U-Net-like `MultiHeadVoxelNet3D`. The default
+checkpoint configuration is `in_ch=5`, `base=16`, and `emb_dim=8`. The checkpoint
+configuration and the generated `MODEL_INVENTORY.json` are authoritative if a future
+checkpoint differs from these defaults.
+
+Input channels are occupancy, normalized local x/y/z coordinates, and normalized
+distance-to-center. Each active 48-cube output core is inferred with an eight-voxel
+context halo on every side, giving a 64 x 64 x 64 input patch. The tensor flow is:
+
+| Stage | Operation | Output shape per patch | Trainable parameters |
+|---|---|---:|---:|
+| Encoder 1 | two 3-cube convolutions, GroupNorm, SiLU | 16 x 64 x 64 x 64 | 9,136 |
+| Pool 1 | 2-cube max pool | 16 x 32 x 32 x 32 | 0 |
+| Encoder 2 | two 3-cube convolutions, GroupNorm, SiLU | 32 x 32 x 32 x 32 | 41,600 |
+| Pool 2 | 2-cube max pool | 32 x 16 x 16 x 16 | 0 |
+| Encoder 3 | two 3-cube convolutions, GroupNorm, SiLU | 64 x 16 x 16 x 16 | 166,144 |
+| Decoder 2 | 2-cube transpose convolution, concat Encoder 2, ConvBlock | 32 x 32 x 32 x 32 | 99,488 |
+| Decoder 1 | 2-cube transpose convolution, concat Encoder 1, ConvBlock | 16 x 64 x 64 x 64 | 24,912 |
+| Semantic head | 1-cube convolution, 16 to 3 | 3 x 64 x 64 x 64 | 51 |
+| Pole head | 1-cube convolution, 16 to 1 | 1 x 64 x 64 x 64 | 17 |
+| Line head | 1-cube convolution, 16 to 1 | 1 x 64 x 64 x 64 | 17 |
+| Objectness head | 1-cube convolution, 16 to 1 | 1 x 64 x 64 x 64 | 17 |
+| Embedding head | 1-cube convolution, 16 to 8 | 8 x 64 x 64 x 64 | 136 |
+
+Total default trainable parameters: **341,518**. Convolution weights exclude bias inside
+`ConvBlock`; GroupNorm contributes learned scale and offset. Transpose convolutions and
+the five 1-cube heads include bias. The embedding tensor is produced by the current
+forward pass but is not used by score fusion. Pole and line scores are respectively:
+
+`0.55 * semantic probability + 0.35 * binary-head probability + 0.10 * objectness probability`
+
+Calibration supplies the final thresholds. Opt1 does not change any model operation,
+weight, BF16 autocast policy, fusion coefficient, or threshold.
+
+The exact checkpoint inventory is generated inside Docker during profiling and contains
+every leaf layer, parameter shape, and count. It is written as both
+`MODEL_INVENTORY.txt` and `MODEL_INVENTORY.json`.
+
+## Training configuration represented by the checkpoint
+
+The V4 training entry point uses 64-cube patches, five input channels, AdamW
+(`lr=1e-4`, `weight_decay=1e-4`), BF16, channels-last 3D tensors, batch size 3 with two
+gradient-accumulation steps, and a ReduceLROnPlateau schedule. Its multi-task objective
+combines semantic asymmetric focal loss, pole/line binary losses, Tversky terms,
+objectness, false-positive penalty, and pole/line cross-class penalty. The checkpoint and
+calibration remain fixed in this experiment; no retraining or recalibration occurs.
+
+## Why Opt1 is quality-equivalent
+
+Opt1 changes data movement and indexing only. Stable sorting replaces repeated active-core
+membership scans; a session-local dense GPU workspace is reused and only the previous
+sparse locations are cleared; exact asymmetric padding replaces unnecessary full-volume
+padding. The dense two-channel float32 workspace falls from 731,529,216 bytes to
+411,041,792 bytes (43.8% less). All 30 sessions must still pass the voxel-by-voxel
+equivalence gate before the completion marker is written.
 
 ## Output layout
 
@@ -178,3 +237,65 @@ tar -xzf "/Users/agni/Downloads/$(basename "$ARCHIVE")" -C "$MAC_OUTPUTS"
 ```
 
 No Python is run on the Mac in this workflow.
+
+## Nsight GPU profiling on Nebius
+
+Profile only after the 30-session equivalence run is complete. The profiler selects the
+median discovered slice from `VELASCO_CUT_CP/session1`, performs three warm-up iterations,
+and captures five measured iterations. It writes beneath the completed run at
+`profiling/nsight_<UTC>`; it never modifies Stage-1 result artifacts.
+
+First verify that the Docker image contains the Nsight CLIs:
+
+```bash
+docker run --rm va-v4-realtime:torch241-cu121 bash -lc '
+  command -v nsys
+  command -v ncu || true
+'
+```
+
+`nsys` is required. `ncu` is optional because kernel replay is intrusive and much slower.
+If `nsys` is absent, create an Nsight-enabled derivative of the same image rather than
+changing PyTorch, CUDA, the checkpoint, or calibration used by inference.
+
+```bash
+REPO=/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
+bash "$REPO/ops/v4_stage1_inference_opt1/build_v4_stage1_nsight_image.sh"
+```
+
+The derivative adds only the official `nsight-systems-cli` package. Continue to use the
+original image for production/equivalence inference. Select the derivative only for the
+profiling command by setting `IMAGE=va-v4-realtime:torch241-cu121-nsight`.
+
+Run the timeline capture:
+
+```bash
+REPO=/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
+IMAGE=va-v4-realtime:torch241-cu121-nsight \
+  bash "$REPO/ops/v4_stage1_inference_opt1/run_v4_stage1_nsight_profile.sh"
+```
+
+For an additional bounded Nsight Compute capture of the first 50 launched kernels:
+
+```bash
+REPO=/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
+RUN_NCU=1 IMAGE=va-v4-realtime:torch241-cu121-nsight \
+  bash "$REPO/ops/v4_stage1_inference_opt1/run_v4_stage1_nsight_profile.sh"
+```
+
+The archive contains the `.nsys-rep`, optional `.ncu-rep`, `NSYS_STATS.txt`, exact model
+inventory, profiler log, and slice/runtime summary. Download it on Mac with:
+
+```bash
+NEBIUS=nebius-va
+DEST=/Users/agni/Downloads
+PROFILE_ARCHIVE=$(ssh "$NEBIUS" 'cat /home/agni/LATEST_V4_STAGE1_OPT_PROFILE_ARCHIVE.txt')
+scp "$NEBIUS:$PROFILE_ARCHIVE" "$NEBIUS:$PROFILE_ARCHIVE.sha256" "$DEST/"
+cd "$DEST"
+shasum -a 256 -c "$(basename "$PROFILE_ARCHIVE").sha256"
+```
+
+Open the `.nsys-rep` in Nsight Systems to inspect GPU occupancy over time, kernel gaps,
+CUDA API synchronization, transfers, and NVTX iteration boundaries. Use `NSYS_STATS.txt`
+for sortable kernel/API totals. Open `.ncu-rep` in Nsight Compute only when per-kernel
+memory, launch, occupancy, or instruction metrics are needed.
