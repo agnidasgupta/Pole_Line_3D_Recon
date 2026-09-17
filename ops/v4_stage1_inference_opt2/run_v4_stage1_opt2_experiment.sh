@@ -15,15 +15,15 @@ VARIANT_NAME=${VARIANT_NAME:?VARIANT_NAME is required}
 RESUME=${RESUME:-1}
 EXPECTED_SESSIONS=${EXPECTED_SESSIONS:-30}
 SESSION_TIMEOUT_SECONDS=${SESSION_TIMEOUT_SECONDS:-7200}
-SCORE_ATOL=${SCORE_ATOL:-1e-4}
+SCORE_ATOL=${SCORE_ATOL:-0}
 ONLY_GROUP_ID=${ONLY_GROUP_ID:-}
-COMPILE_MODEL=${COMPILE_MODEL:-1}
-COMPILE_MODE=${COMPILE_MODE:-reduce-overhead}
+COMPILE_MODEL=${COMPILE_MODEL:-0}
+COMPILE_MODE=${COMPILE_MODE:-default}
 BATCH_SIZE=${BATCH_SIZE:-12}
 CHANNELS_LAST=${CHANNELS_LAST:-1}
 PINNED_D2H=${PINNED_D2H:-1}
-PRUNE_EMBEDDING_HEAD=${PRUNE_EMBEDDING_HEAD:-1}
-WARMUP_ITERATIONS=${WARMUP_ITERATIONS:-3}
+PRUNE_EMBEDDING_HEAD=${PRUNE_EMBEDDING_HEAD:-0}
+WARMUP_ITERATIONS=${WARMUP_ITERATIONS:-0}
 RUN_ID="${RUN_STAMP}_${VARIANT_NAME}"
 RUN_ROOT="$HOST_OUTPUTS/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/$RUN_ID"
 RUN_C="/outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/$RUN_ID"
@@ -51,13 +51,13 @@ group_id() {
 [[ "$RESUME" =~ ^[01]$ ]] || fail "RESUME must be 0 or 1"
 [[ "$EXPECTED_SESSIONS" =~ ^[0-9]+$ ]] || fail "EXPECTED_SESSIONS must be an integer"
 [[ "$SESSION_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "SESSION_TIMEOUT_SECONDS must be an integer"
-[[ "$COMPILE_MODEL" =~ ^[01]$ ]] || fail "COMPILE_MODEL must be 0 or 1"
-[[ "$CHANNELS_LAST" =~ ^[01]$ ]] || fail "CHANNELS_LAST must be 0 or 1"
+[[ "$COMPILE_MODEL" = 0 ]] || fail "production-preserving experiments require COMPILE_MODEL=0"
+[[ "$CHANNELS_LAST" = 1 ]] || fail "production-preserving experiments require CHANNELS_LAST=1"
 [[ "$PINNED_D2H" =~ ^[01]$ ]] || fail "PINNED_D2H must be 0 or 1"
-[[ "$PRUNE_EMBEDDING_HEAD" =~ ^[01]$ ]] || fail "PRUNE_EMBEDDING_HEAD must be 0 or 1"
-[[ "$WARMUP_ITERATIONS" =~ ^[1-9][0-9]*$ ]] || fail "WARMUP_ITERATIONS must be a positive integer"
-[[ "$BATCH_SIZE" =~ ^(12|16|24|32)$ ]] || fail "BATCH_SIZE must be 12, 16, 24, or 32"
-[[ "$COMPILE_MODE" =~ ^(default|reduce-overhead|max-autotune)$ ]] || fail "invalid COMPILE_MODE"
+[[ "$PRUNE_EMBEDDING_HEAD" = 0 ]] || fail "production-preserving experiments require PRUNE_EMBEDDING_HEAD=0"
+[[ "$WARMUP_ITERATIONS" = 0 ]] || fail "production-preserving experiments require WARMUP_ITERATIONS=0"
+[[ "$BATCH_SIZE" = 12 ]] || fail "production-preserving experiments require BATCH_SIZE=12"
+[[ "$COMPILE_MODE" = default ]] || fail "production-preserving experiments require COMPILE_MODE=default"
 for path in "$EXP_REPO/.git" "$TOOL_DIR" "$FULL_OPS/export_score_v4_stage1.py" "$HOST_INPUT" "$BASELINE_RUN/PHASE1_STAGE1_OK.txt" "$BASELINE_RUN/run_context.env" "$MODEL" "$CALIBRATION"; do
   [ -e "$path" ] || fail "missing required path: $path"
 done
@@ -97,7 +97,7 @@ printf '%s\n' "$BASELINE_RUN" > /home/agni/LATEST_V4_STAGE1_OPT2_BASELINE.txt
 
 exec > >(tee -a "$DRIVER_LOG") 2>&1
 echo "============================================================"
-echo "V4 STAGE1 POSITIVE-SAFE PERFORMANCE EXPERIMENT"
+echo "V4 STAGE1 PRODUCTION-EQUIVALENT PERFORMANCE EXPERIMENT"
 echo "============================================================"
 echo "run_stamp=$RUN_STAMP"
 echo "variant_name=$VARIANT_NAME"
@@ -112,16 +112,6 @@ echo "compile_model=$COMPILE_MODEL compile_mode=$COMPILE_MODE channels_last=$CHA
 echo "pinned_d2h=$PINNED_D2H prune_embedding_head=$PRUNE_EMBEDDING_HEAD warmup_iterations=$WARMUP_ITERATIONS"
 echo "only_group_id=${ONLY_GROUP_ID:-ALL} expected_sessions=$EXPECTED_SESSIONS"
 echo "score_atol=$SCORE_ATOL"
-
-if [ "$COMPILE_MODEL" = 1 ]; then
-  echo "===== TORCH.COMPILE ENVIRONMENT PREFLIGHT ====="
-  docker run --rm --gpus all "$IMAGE" bash -lc '
-    set -euo pipefail
-    command -v "${CC:-cc}"
-    command -v "${CXX:-c++}"
-    "${CC:-cc}" --version | head -n 1
-  ' || fail "COMPILE_MODEL=1 requires an image containing a C/C++ compiler; build Dockerfile.torch-compile"
-fi
 
 echo "===== COMPILE AND SELF-TEST IN CUDA DOCKER ====="
 docker run --rm --gpus all \
@@ -148,7 +138,7 @@ BASELINE_C=$(host_to_container_output "$BASELINE_RUN")
 printf 'group_id\tsid\n' > "$RUN_ROOT/session_map.tsv"
 cat > "$RUN_ROOT/RUN_INFO.txt" <<EOF
 created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-experiment=v4_stage1_active_gpu_quality_gated_opt2
+experiment=v4_stage1_active_gpu_production_equivalent_opt2
 variant_name=$VARIANT_NAME
 repository=$EXP_REPO
 branch=$(git -C "$EXP_REPO" branch --show-current)
@@ -169,7 +159,7 @@ pinned_d2h=$PINNED_D2H
 prune_embedding_head=$PRUNE_EMBEDDING_HEAD
 warmup_iterations=$WARMUP_ITERATIONS
 only_group_id=$ONLY_GROUP_ID
-reference_semantics=Pole_and_Line_are_verified_positive;label_0_is_unknown_not_negative
+comparison_purpose=implementation_equivalence_only;incomplete_labels_are_not_ground_truth
 evaluate_all_cores=0
 gpu_coord_channels=1
 fixed_batch_shape=1
@@ -194,12 +184,12 @@ for manifest in "${MANIFESTS[@]}"; do
   candidate_export_c="$RUN_C/stage1_inference/$sid"
   timing_c="$RUN_C/timings/stage1/$sid.csv"
   progress_c="$RUN_C/status/$sid.progress.json"
-  report_c="$RUN_C/status/$sid.positive_guard.json"
+  report_c="$RUN_C/status/$sid.production_equivalence.json"
   log="$RUN_ROOT/logs/stage1/$sid.log"
   export_log="$RUN_ROOT/logs/stage1_export/$sid.log"
   ok="$RUN_ROOT/status/$sid.stage1.ok"
   bad="$RUN_ROOT/status/$sid.stage1.failed"
-  report="$RUN_ROOT/status/$sid.positive_guard.json"
+  report="$RUN_ROOT/status/$sid.production_equivalence.json"
   mkdir -p "$candidate_stage1" "$candidate_export"
   echo "============================================================"
   echo "SESSION $index/${#MANIFESTS[@]} gid=$gid sid=$sid"
@@ -267,9 +257,9 @@ for manifest in "${MANIFESTS[@]}"; do
     guard_rc=$?
     set -e
     if [ "$guard_rc" -ne 0 ]; then
-      printf 'gid=%s\nsid=%s\nexit_code=%s\nreason=positive_reference_guard_failed_or_review_required\nlog=%s\nreport=%s\n' \
+      printf 'gid=%s\nsid=%s\nexit_code=%s\nreason=production_output_equivalence_failed\nlog=%s\nreport=%s\n' \
         "$gid" "$sid" "$guard_rc" "$log" "$report" > "$bad"
-      echo "POSITIVE_REFERENCE_GUARD_BLOCKED gid=$gid sid=$sid report=$report log=$log"
+      echo "PRODUCTION_OUTPUT_EQUIVALENCE_FAILED gid=$gid sid=$sid report=$report log=$log"
       tail -n 100 "$log"
       exit "$guard_rc"
     fi
@@ -277,7 +267,7 @@ for manifest in "${MANIFESTS[@]}"; do
 
   elapsed=$(( $(date +%s) - start ))
   if [ "$rc" -eq 0 ]; then
-    printf 'gid=%s\nsid=%s\nelapsed_seconds=%s\nknown_positive_regression=false\nunverified_additions=0\n' \
+    printf 'gid=%s\nsid=%s\nelapsed_seconds=%s\nproduction_output_equivalent=true\n' \
       "$gid" "$sid" "$elapsed" > "$ok"
     accepted=$((accepted+1))
     echo "SESSION_ACCEPTED elapsed_seconds=$elapsed"
@@ -292,7 +282,7 @@ done
 
 if [ "$failed" -ne 0 ] || [ "$accepted" -ne "$EXPECTED_SESSIONS" ]; then
   echo "V4_STAGE1_OPT2_SESSION_EXECUTION_FAILED accepted=$accepted failed=$failed expected=$EXPECTED_SESSIONS"
-  echo "Timing summarization skipped because no complete, guarded candidate set exists."
+  echo "Timing summarization skipped because no complete, production-equivalent candidate set exists."
   exit 1
 fi
 
@@ -305,16 +295,16 @@ docker run --rm \
     --output "$RUN_C/STAGE1_TIMING_SESSION_AVERAGES.txt" \
   || fail "timing summary failed"
 
-guarded=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.positive_guard.json' | wc -l | tr -d ' ')
+guarded=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.production_equivalence.json' | wc -l | tr -d ' ')
 find "$RUN_ROOT" -type f ! -name FILE_INVENTORY.txt -printf '%P\t%s\n' | sort > "$RUN_ROOT/FILE_INVENTORY.txt"
-echo "accepted=$accepted failed=$failed positive_guarded=$guarded expected=$EXPECTED_SESSIONS"
+echo "accepted=$accepted failed=$failed production_equivalent=$guarded expected=$EXPECTED_SESSIONS"
 if [ "$accepted" -eq "$EXPECTED_SESSIONS" ] && [ "$failed" -eq 0 ] && [ "$guarded" -eq "$EXPECTED_SESSIONS" ]; then
-  printf 'completed_utc=%s\naccepted=%s\nfailed=0\npositive_guarded_sessions=%s\nreference_semantics=positive_only\n' \
+  printf 'completed_utc=%s\naccepted=%s\nfailed=0\nproduction_equivalent_sessions=%s\ncomparison_purpose=implementation_equivalence_only\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$accepted" "$guarded" \
     > "$RUN_ROOT/PHASE1_STAGE1_OK.txt"
-  cp "$RUN_ROOT/PHASE1_STAGE1_OK.txt" "$RUN_ROOT/STAGE1_OPT2_POSITIVE_SAFE_COMPLETE.txt"
+  cp "$RUN_ROOT/PHASE1_STAGE1_OK.txt" "$RUN_ROOT/STAGE1_OPT2_PRODUCTION_EQUIVALENT_COMPLETE.txt"
   find "$RUN_ROOT" -type f ! -name FILE_INVENTORY.txt -printf '%P\t%s\n' | sort > "$RUN_ROOT/FILE_INVENTORY.txt"
-  echo "V4_STAGE1_OPT2_ALL_SESSIONS_POSITIVE_SAFE_AND_OK"
+  echo "V4_STAGE1_OPT2_ALL_SESSIONS_PRODUCTION_EQUIVALENT_AND_OK"
   exit 0
 fi
 echo "V4_STAGE1_OPT2_INCOMPLETE"

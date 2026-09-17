@@ -2,10 +2,9 @@
 """Quality-gated Stage-1 execution experiments derived from accepted Opt1.
 
 This module intentionally leaves the accepted V4 network, checkpoint loading,
-calibration, BF16 autocast, patch/core geometry, batching, score fusion, and output
-serialization in the production v4 package. Opt2 adds only mathematically
-equivalent execution choices: compiler/backend selection, batch grouping, removal of
-the unused embedding head, and pinned final output staging.
+calibration, BF16 autocast, patch/core geometry, batch size, memory format, score
+fusion, thresholds and output serialization unchanged. Opt2 permits only outer
+execution-plumbing changes that must reproduce production outputs exactly.
 """
 from __future__ import annotations
 
@@ -20,39 +19,7 @@ import torch
 import v4_realtime_core as reference
 
 
-OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-quality-gated-20260917"
-
-
-class InferenceHeadsOnly(torch.nn.Module):
-    """Run the accepted trunk and the four heads used by deployed score fusion.
-
-    The checkpoint embedding head is auxiliary and its tensor is not read by
-    _run_model_scores or by any Stage1 artifact writer. Removing only that
-    independent head cannot alter the shared trunk or deployed head values.
-    """
-
-    def __init__(self, source: torch.nn.Module):
-        super().__init__()
-        required = (
-            "encoder", "up2", "up1", "semantic_head", "pole_head",
-            "line_head", "objectness_head",
-        )
-        missing = [name for name in required if not hasattr(source, name)]
-        if missing:
-            raise TypeError(f"checkpoint model lacks required inference modules: {missing}")
-        for name in required:
-            setattr(self, name, getattr(source, name))
-
-    def forward(self, x: torch.Tensor):
-        s1, s2, s3 = self.encoder(x)
-        y = self.up2(s3, s2)
-        y = self.up1(y, s1)
-        return {
-            "semantic": self.semantic_head(y),
-            "pole": self.pole_head(y),
-            "line": self.line_head(y),
-            "objectness": self.objectness_head(y),
-        }
+OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-production-equivalent-20260917"
 
 
 def active_core_groups_opt(
@@ -448,15 +415,17 @@ def predict_v4_sparse_rows_opt(
     pinned_d2h: bool = True,
     require_compiled: bool = False,
 ):
-    """Run an isolated active-GPU Opt2 candidate under the quality gate."""
+    """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
         raise ValueError("opt2 is restricted to accepted active_gpu mode")
-    if int(batch_size) <= 0:
-        raise ValueError("batch_size must be positive")
+    if int(batch_size) != 12:
+        raise ValueError("production-preserving opt2 fixes batch_size=12")
+    if not channels_last:
+        raise ValueError("production-preserving opt2 fixes channels_last=1")
     if not fixed_batch_shape:
-        raise ValueError("opt2 quality contract requires fixed_batch_shape=1")
+        raise ValueError("production-preserving opt2 requires fixed_batch_shape=1")
     if amp != "bf16":
-        raise ValueError("opt2 quality contract fixes amp=bf16")
+        raise ValueError("production-preserving opt2 fixes amp=bf16")
     if workspace is None:
         workspace = V4SparseGpuWorkspace()
     return _predict_active_gpu_opt(

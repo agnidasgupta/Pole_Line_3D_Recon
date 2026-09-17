@@ -9,12 +9,12 @@ RUN_ROOT=$(head -n 1 "$RUN_FILE")
 DRIVER="$RUN_ROOT/STAGE1_OPT2_DRIVER.log"
 accepted=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.stage1.ok' 2>/dev/null | wc -l | tr -d ' ')
 failed=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.stage1.failed' 2>/dev/null | wc -l | tr -d ' ')
-guarded=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.positive_guard.json' 2>/dev/null | wc -l | tr -d ' ')
+guarded=$(find "$RUN_ROOT/status" -maxdepth 1 -type f -name '*.production_equivalence.json' 2>/dev/null | wc -l | tr -d ' ')
 latest_epoch=$(find "$RUN_ROOT" -type f -printf '%T@\n' 2>/dev/null | sort -nr | head -n 1 | cut -d. -f1)
 now=$(date +%s)
 age=$((now-${latest_epoch:-now}))
 echo "RUN_ROOT=$RUN_ROOT"
-echo "ACCEPTED=$accepted FAILED=$failed POSITIVE_GUARDED=$guarded LAST_OUTPUT_AGE_SECONDS=$age"
+echo "ACCEPTED=$accepted FAILED=$failed PRODUCTION_EQUIVALENT=$guarded LAST_OUTPUT_AGE_SECONDS=$age"
 process_command=""
 if [ -r "/proc/$PID/cmdline" ]; then process_command=$(tr '\0' ' ' < "/proc/$PID/cmdline"); fi
 if kill -0 "$PID" 2>/dev/null && [[ "$process_command" == *run_v4_stage1_opt2_experiment.sh* ]]; then
@@ -31,11 +31,11 @@ if kill -0 "$PID" 2>/dev/null && [[ "$process_command" == *run_v4_stage1_opt2_ex
   fi
 else
   echo "STATE=EXITED"
-  if [ -s "$RUN_ROOT/STAGE1_OPT2_POSITIVE_SAFE_COMPLETE.txt" ] && \
+  if [ -s "$RUN_ROOT/STAGE1_OPT2_PRODUCTION_EQUIVALENT_COMPLETE.txt" ] && \
      [ -s "$RUN_ROOT/STAGE1_TIMING_SESSION_AVERAGES.txt" ] && \
      [ "$accepted" -eq 30 ] && [ "$failed" -eq 0 ] && [ "$guarded" -eq 30 ]; then
     echo "READY_TO_PACKAGE=YES"
-    cat "$RUN_ROOT/STAGE1_OPT2_POSITIVE_SAFE_COMPLETE.txt"
+    cat "$RUN_ROOT/STAGE1_OPT2_PRODUCTION_EQUIVALENT_COMPLETE.txt"
   else
     echo "READY_TO_PACKAGE=NO"
   fi

@@ -102,16 +102,6 @@ def main():
             delta = float(np.max(np.abs(expected[name] - actual[name]), initial=0.0))
             assert delta == 0.0, (seed, name, delta)
         assert np.array_equal(expected["semantic"], actual["semantic"])
-        batch16 = predict_v4_sparse_rows_opt(
-            item, model, cfg, calibration, grid_size=grid, core_size=48,
-            batch_size=16, amp="bf16", evaluate_all_cores=False,
-            gpu_coord_channels=True, fixed_batch_shape=True, workspace=workspace,
-            pinned_d2h=True,
-        )
-        for name in ("pole", "line", "objectness"):
-            delta = float(np.max(np.abs(actual[name] - batch16[name]), initial=0.0))
-            assert delta == 0.0, (seed, "batch16", name, delta)
-        assert np.array_equal(actual["semantic"], batch16["semantic"])
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")

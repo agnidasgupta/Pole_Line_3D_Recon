@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""One-sided Stage-1 quality guard for execution-only Opt2 candidates.
+"""Strict implementation-equivalence check against V4 production output.
 
-The accepted output is a positive-only reference: Pole/Line predictions are
-trusted positives, but label 0 is unknown rather than a trusted negative.
-Consequently this guard rejects losses and Pole<->Line flips of known positives.
-Candidate-only positives are reported as unverified and require review; they are
-not called false positives. Numerical/structural checks are implementation
-fidelity checks and are reported separately from inference quality.
+This does not score inference quality and does not treat incomplete ground-truth
+labels as authoritative. It only verifies that an execution optimization reproduces
+the existing production model outputs without changing inference behavior.
 """
 from __future__ import annotations
 
@@ -20,7 +17,7 @@ import pandas as pd
 from v4_realtime_core import label_from_scores, load_calibration
 
 
-STRUCTURAL_ARRAYS = ("coords", "dist_values", "source_rows", "raw_labels")
+STRUCTURAL_ARRAYS = ("coords", "dist_values", "source_rows", "raw_labels", "semantic")
 SCORE_ARRAYS = ("pole", "line", "objectness")
 META_FIELDS = (
     "contract_version", "stage", "id", "source", "relative_path", "geography",
@@ -37,7 +34,7 @@ def parse_args():
     p.add_argument("--candidate-export", required=True)
     p.add_argument("--calibration-json", required=True)
     p.add_argument("--report", required=True)
-    p.add_argument("--score-atol", type=float, default=1.0e-4)
+    p.add_argument("--score-atol", type=float, default=0.0)
     return p.parse_args()
 
 
@@ -117,7 +114,6 @@ def compare_csv_frame(left_path: Path, right_path: Path, score_atol: float):
         raise RuntimeError(f"inference CSV shape/schema changed: {left_path.name}")
     max_abs = 0.0
     positive_counts = {}
-    semantic_mismatches = 0
     score_columns = {"v4_pole_score", "v4_line_score", "v4_objectness"}
     for name in left.columns:
         if name in score_columns:
@@ -138,12 +134,14 @@ def compare_csv_frame(left_path: Path, right_path: Path, score_atol: float):
                 ),
             )
         elif name == "v4_semantic":
-            semantic_mismatches += int(np.count_nonzero(left[name].to_numpy() != right[name].to_numpy()))
+            pd.testing.assert_series_equal(
+                left[name], right[name], check_exact=True, check_dtype=False, check_names=True
+            )
         else:
             pd.testing.assert_series_equal(
                 left[name], right[name], check_exact=True, check_dtype=False, check_names=True
             )
-    return max_abs, positive_counts, semantic_mismatches
+    return max_abs, positive_counts
 
 
 def metric_artifact_status(base: Path, candidate: Path):
@@ -163,8 +161,8 @@ def metric_artifact_status(base: Path, candidate: Path):
 
 def main():
     a = parse_args()
-    if a.score_atol < 0.0 or a.score_atol > 1.0e-4:
-        raise ValueError("--score-atol must remain between 0 and the 1e-4 fidelity ceiling")
+    if a.score_atol != 0.0:
+        raise ValueError("production-preserving experiments require --score-atol=0")
     baseline = Path(a.baseline_stage1).resolve()
     candidate = Path(a.candidate_stage1).resolve()
     baseline_export = Path(a.baseline_export).resolve()
@@ -190,7 +188,6 @@ def main():
     calibration = load_calibration(a.calibration_json)
     score_max = {name: 0.0 for name in SCORE_ARRAYS}
     positive_counts = {}
-    semantic_mismatches = 0
     occupied_rows = 0
     for relative in sorted(base_npz):
         with np.load(base_npz[relative]) as left, np.load(candidate_npz[relative]) as right:
@@ -206,7 +203,6 @@ def main():
                     raise RuntimeError(
                         f"Stage1 {name} changed beyond fidelity tolerance: {relative} {delta} > {a.score_atol}"
                     )
-            semantic_mismatches += int(np.count_nonzero(left["semantic"] != right["semantic"]))
             reference_label = label_from_scores(
                 left["pole"], left["line"],
                 calibration["pole_threshold"], calibration["line_threshold"],
@@ -227,38 +223,31 @@ def main():
         raise RuntimeError("Stage1 inference CSV inventory changed")
     csv_score_max = 0.0
     csv_positive_counts = {}
-    csv_semantic_mismatches = 0
     for relative in sorted(base_csv):
-        delta, counts, semantic_delta = compare_csv_frame(
+        delta, counts = compare_csv_frame(
             base_csv[relative], candidate_csv[relative], a.score_atol
         )
         csv_score_max = max(csv_score_max, delta)
         add_counts(csv_positive_counts, counts)
-        csv_semantic_mismatches += semantic_delta
 
     metrics = metric_artifact_status(baseline_export, candidate_export)
     lost = positive_counts.get("known_positive_lost_to_unknown", 0)
     flips = positive_counts.get("known_positive_class_flips", 0)
     additions = positive_counts.get("unverified_candidate_additions", 0)
-    if lost or flips:
-        status = "REJECT_KNOWN_POSITIVE_REGRESSION"
-        passed = False
-    elif additions:
-        status = "REVIEW_UNVERIFIED_ADDITIONS"
+    if lost or flips or additions:
+        status = "REJECT_PRODUCTION_PREDICTION_CHANGE"
         passed = False
     else:
-        status = "PASS_NO_KNOWN_POSITIVE_REGRESSION"
+        status = "PASS_PRODUCTION_OUTPUT_EQUIVALENCE"
         passed = True
 
     report = {
-        "guard_version": "v4-stage1-opt2-positive-only-reference-20260917",
-        "reference_semantics": {
-            "pole_and_line_labels": "verified_positive",
-            "label_zero": "unknown_not_negative",
-        },
+        "equivalence_version": "v4-stage1-opt2-production-output-equivalence-20260917",
+        "comparison_purpose": "implementation_equivalence_only_not_inference_quality",
+        "ground_truth_note": "unlabelled voxels may contain real poles or lines; metrics do not define this gate",
         "passed_for_automatic_promotion": passed,
-        "promotion_status": status,
-        "score_atol_is_implementation_fidelity_not_quality": a.score_atol,
+        "equivalence_status": status,
+        "score_atol": a.score_atol,
         "manifest_rows": int(manifest_rows),
         "npz_files": len(base_npz),
         "metadata_files": len(base_meta),
@@ -266,13 +255,10 @@ def main():
         "occupied_rows_compared": occupied_rows,
         "positive_reference_counts": positive_counts,
         "export_positive_reference_counts": csv_positive_counts,
-        "unverified_additions_require_review": bool(additions),
         "score_max_abs": score_max,
         "inference_csv_score_max_abs": csv_score_max,
-        "semantic_argmax_mismatches_fidelity_diagnostic": semantic_mismatches,
-        "export_semantic_mismatches_fidelity_diagnostic": csv_semantic_mismatches,
         "structural_arrays_exact": list(STRUCTURAL_ARRAYS),
-        "pseudo_metric_artifacts_diagnostic_only": metrics,
+        "pseudo_metric_artifacts_recorded_but_not_an_acceptance_rule": metrics,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

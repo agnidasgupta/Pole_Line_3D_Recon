@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rank Opt2 runs that passed the positive-only reference guard."""
+"""Rank Opt2 runs that reproduced V4 production outputs exactly."""
 from __future__ import annotations
 
 import argparse
@@ -35,9 +35,9 @@ def main():
         if not timing_paths:
             raise RuntimeError(f"no timing CSVs in {root}")
         timing = pd.concat([pd.read_csv(path) for path in timing_paths], ignore_index=True)
-        reports = [json.loads(path.read_text()) for path in sorted((root / "status").glob("*.positive_guard.json"))]
+        reports = [json.loads(path.read_text()) for path in sorted((root / "status").glob("*.production_equivalence.json"))]
         if not reports:
-            raise RuntimeError(f"no positive guard reports in {root}")
+            raise RuntimeError(f"no production-equivalence reports in {root}")
         passed = all(bool(report.get("passed_for_automatic_promotion")) for report in reports)
         additions = sum(
             int(report.get("positive_reference_counts", {}).get("unverified_candidate_additions", 0))
@@ -53,7 +53,7 @@ def main():
         )
         row = {
             "variant": info.get("variant_name", root.name),
-            "automatic_promotion_guard": "PASS" if passed else "BLOCK",
+            "production_equivalence": "PASS" if passed else "BLOCK",
             "sessions": len(reports),
             "known_positive_losses": lost,
             "known_positive_class_flips": flips,
@@ -72,7 +72,7 @@ def main():
         }
         rows.append(row)
     frame = pd.DataFrame(rows).sort_values(
-        ["automatic_promotion_guard", "stage1_wall_ms"], ascending=[False, True]
+        ["production_equivalence", "stage1_wall_ms"], ascending=[False, True]
     )
     print(frame.to_string(index=False))
     if a.output:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated, quality-gated V4 Stage-1 Opt2 experiment runner."""
+"""Isolated V4 Stage-1 execution experiment with unchanged production inference."""
 from __future__ import annotations
 
 import argparse
@@ -9,15 +9,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import torch
 from pandas.errors import EmptyDataError
-from precision_common import maybe_compile_model
 
 from run_v4_realtime_session import discover
 from v4_realtime_core import (
     build_sparse_item_from_dataframe,
     extract_center_metadata,
-    autocast_ctx,
     load_calibration,
     load_v4_model,
     setup_torch,
@@ -32,11 +29,7 @@ from v4_stage_contracts import (
     stage1_paths,
     upsert_manifest_row,
 )
-from v4_realtime_core_opt2 import (
-    InferenceHeadsOnly,
-    V4SparseGpuWorkspace,
-    predict_v4_sparse_rows_opt,
-)
+from v4_realtime_core_opt2 import V4SparseGpuWorkspace, predict_v4_sparse_rows_opt
 
 
 TIMING_COLUMNS = [
@@ -65,61 +58,32 @@ def parse_args():
     p.add_argument("--progress_json", required=True)
     p.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
     p.add_argument("--core_size", type=int, default=48)
-    p.add_argument("--batch_size", type=int, choices=[12, 16, 24, 32], default=12)
+    p.add_argument("--batch_size", type=int, choices=[12], default=12)
     p.add_argument("--amp", choices=["bf16"], default="bf16")
-    p.add_argument("--compile_model", type=int, choices=[0, 1], default=0)
+    p.add_argument("--compile_model", type=int, choices=[0], default=0)
     p.add_argument(
         "--compile_mode",
         choices=["default", "reduce-overhead", "max-autotune"],
         default="reduce-overhead",
     )
-    p.add_argument("--channels_last", type=int, choices=[0, 1], default=1)
+    p.add_argument("--channels_last", type=int, choices=[1], default=1)
     p.add_argument("--pinned_d2h", type=int, choices=[0, 1], default=1)
-    p.add_argument("--prune_embedding_head", type=int, choices=[0, 1], default=1)
-    p.add_argument("--warmup_iterations", type=int, default=3)
+    p.add_argument("--prune_embedding_head", type=int, choices=[0], default=0)
+    p.add_argument("--warmup_iterations", type=int, choices=[0], default=0)
     p.add_argument("--evaluate_all_cores", type=int, choices=[0], default=0)
     p.add_argument("--gpu_coord_channels", type=int, choices=[1], default=1)
     p.add_argument("--fixed_batch_shape", type=int, choices=[1], default=1)
     p.add_argument("--resume", type=int, choices=[0, 1], default=1)
     p.add_argument("--max_slices", type=int, default=0)
     a = p.parse_args()
-    if a.warmup_iterations < 1:
-        p.error("--warmup_iterations must be at least 1")
     return a
 
 
 def prepare_model_for_experiment(a):
-    model, cfg, _ = load_v4_model(a.model_path, "cuda", False, "default")
-    if a.prune_embedding_head:
-        model = InferenceHeadsOnly(model).to("cuda").eval()
-    compiled = False
-    if a.compile_model:
-        model, compiled = maybe_compile_model(model, True, a.compile_mode)
-        if not compiled:
-            raise RuntimeError("torch.compile was requested but did not activate")
-
-    use_coord = bool(int(cfg.get("use_coord_channels", cfg.get("use_coord", 1))))
-    use_dist = bool(int(cfg.get("use_dist", 1)))
-    in_channels = 1 + (3 if use_coord else 0) + (1 if use_dist else 0)
-    patch = int(cfg.get("patch_size", 64))
-    dummy = torch.zeros(
-        (a.batch_size, in_channels, patch, patch, patch),
-        device="cuda",
-        dtype=torch.float32,
-    )
-    if a.channels_last:
-        dummy = dummy.contiguous(memory_format=torch.channels_last_3d)
-    warmup_t0 = time.perf_counter()
-    for _ in range(a.warmup_iterations):
-        with torch.inference_mode(), autocast_ctx(a.amp):
-            output = model(dummy)
-        for name in ("semantic", "pole", "line", "objectness"):
-            if name not in output:
-                raise RuntimeError(f"warm-up output is missing {name}")
-    torch.cuda.synchronize()
-    warmup_ms = (time.perf_counter() - warmup_t0) * 1000.0
-    del output, dummy
-    return model, cfg, compiled, warmup_ms
+    model, cfg, compiled = load_v4_model(a.model_path, "cuda", False, "default")
+    if compiled:
+        raise RuntimeError("production-preserving experiment unexpectedly compiled the model")
+    return model, cfg, False, 0.0
 
 
 def completed_manifest_keys(path: Path):
