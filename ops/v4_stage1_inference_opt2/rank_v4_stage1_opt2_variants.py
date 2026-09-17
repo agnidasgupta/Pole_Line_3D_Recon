@@ -13,6 +13,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("roots", nargs="+", help="one or more Opt2 run roots")
     p.add_argument("--output", help="optional CSV output path")
+    p.add_argument("--group-id", help="compare timing only for one matching session")
     return p.parse_args()
 
 
@@ -35,6 +36,10 @@ def main():
         if not timing_paths:
             raise RuntimeError(f"no timing CSVs in {root}")
         timing = pd.concat([pd.read_csv(path) for path in timing_paths], ignore_index=True)
+        if a.group_id:
+            timing = timing[timing["group_id"].astype(str).eq(a.group_id)].copy()
+            if timing.empty:
+                raise RuntimeError(f"group_id {a.group_id!r} is absent from {root}")
         reports = [json.loads(path.read_text()) for path in sorted((root / "status").glob("*.production_equivalence.json"))]
         if not reports:
             raise RuntimeError(f"no production-equivalence reports in {root}")
@@ -54,7 +59,7 @@ def main():
         row = {
             "variant": info.get("variant_name", root.name),
             "production_equivalence": "PASS" if passed else "BLOCK",
-            "sessions": len(reports),
+            "sessions": int(timing["group_id"].astype(str).nunique()),
             "known_positive_losses": lost,
             "known_positive_class_flips": flips,
             "unverified_additions": additions,
@@ -67,6 +72,8 @@ def main():
             "compile_mode": info.get("compile_mode"),
             "channels_last": info.get("channels_last"),
             "pinned_d2h": info.get("pinned_d2h"),
+            "detailed_cuda_timing": info.get("detailed_cuda_timing"),
+            "retain_gather_host_buffers": info.get("retain_gather_host_buffers", "0"),
             "prune_embedding_head": info.get("prune_embedding_head"),
             "run_root": str(root),
         }

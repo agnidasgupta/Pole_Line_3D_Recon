@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile the production-equivalent Opt2 candidate without writing Stage1 artifacts."""
+"""Profile accepted E0 or production-gated E3 without writing Stage1 artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--slice_ordinal", type=int, default=-1)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--iterations", type=int, default=5)
+    parser.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
     parser.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
     args = parser.parse_args()
     if args.warmup < 0 or args.iterations < 1:
@@ -63,7 +64,8 @@ def main():
             channels_last=True, evaluate_all_cores=False,
             gpu_coord_channels=True, fixed_batch_shape=True,
             workspace=workspace, pinned_d2h=False, require_compiled=False,
-            detailed_cuda_timing=False,
+            detailed_cuda_timing=True,
+            retain_gather_host_buffers=bool(args.retain_gather_host_buffers),
         )
 
     for _ in range(args.warmup):
@@ -73,7 +75,8 @@ def main():
     wall_ms = []
     component_rows = []
     torch.cuda.cudart().cudaProfilerStart()
-    torch.cuda.nvtx.range_push("stage1_opt2_no_cuda_events_profile")
+    variant = "e3_retain_gather_host_buffers" if args.retain_gather_host_buffers else "e0_control"
+    torch.cuda.nvtx.range_push(f"stage1_opt2_{variant}_profile")
     try:
         for index in range(args.iterations):
             torch.cuda.nvtx.range_push(f"stage1_opt2_iteration_{index:03d}")
@@ -119,7 +122,8 @@ def main():
             "batch_size": 12,
             "channels_last": True,
             "pinned_d2h": False,
-            "detailed_cuda_timing": False,
+            "detailed_cuda_timing": True,
+            "retain_gather_host_buffers": bool(args.retain_gather_host_buffers),
             "full_model_heads": True,
             "patch_size": int(cfg.get("patch_size", 64)),
             "core_size": 48,
@@ -134,4 +138,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

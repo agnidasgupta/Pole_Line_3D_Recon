@@ -2,7 +2,6 @@
 """Deterministic scheduler, batch grouping, and D2H regression tests for Opt2."""
 from __future__ import annotations
 
-import math
 import numpy as np
 import torch
 
@@ -79,7 +78,7 @@ def main():
         "score_object_weight": 0.10,
     }
     workspace = V4SparseGpuWorkspace()
-    no_timing_workspace = V4SparseGpuWorkspace()
+    e3_workspace = V4SparseGpuWorkspace()
     boundary = np.asarray(
         [[0, 0, 0], [96, 82, 64], [48, 48, 48], [80, 60, 20], [7, 75, 63]],
         dtype=np.int32,
@@ -104,18 +103,18 @@ def main():
             delta = float(np.max(np.abs(expected[name] - actual[name]), initial=0.0))
             assert delta == 0.0, (seed, name, delta)
         assert np.array_equal(expected["semantic"], actual["semantic"])
-        no_timing = predict_v4_sparse_rows_opt(
+        e3 = predict_v4_sparse_rows_opt(
             item, model, cfg, calibration, grid_size=grid, core_size=48,
             batch_size=12, amp="bf16", evaluate_all_cores=False,
             gpu_coord_channels=True, fixed_batch_shape=True,
-            workspace=no_timing_workspace, pinned_d2h=False,
-            detailed_cuda_timing=False,
+            workspace=e3_workspace, pinned_d2h=False,
+            detailed_cuda_timing=True, retain_gather_host_buffers=True,
         )
         for name in ("pole", "line", "objectness"):
-            delta = float(np.max(np.abs(expected[name] - no_timing[name]), initial=0.0))
-            assert delta == 0.0, (seed, "no_timing", name, delta)
-        assert np.array_equal(expected["semantic"], no_timing["semantic"])
-        assert math.isnan(no_timing["timing"]["gpu_model_ms"])
+            delta = float(np.max(np.abs(expected[name] - e3[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e3", name, delta)
+        assert np.array_equal(expected["semantic"], e3["semantic"])
+        assert e3["timing"]["retain_gather_host_buffers"] == 1
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")

@@ -44,6 +44,7 @@ TIMING_COLUMNS = [
     "host_output_reused", "pinned_d2h", "gpu_volume_mode", "fixed_batch_shape",
     "batch_size", "channels_last", "compile_model", "compile_mode",
     "prune_embedding_head", "detailed_cuda_timing", "optimization_version",
+    "retain_gather_host_buffers",
 ]
 
 
@@ -68,7 +69,8 @@ def parse_args():
     )
     p.add_argument("--channels_last", type=int, choices=[1], default=1)
     p.add_argument("--pinned_d2h", type=int, choices=[0, 1], default=0)
-    p.add_argument("--detailed_cuda_timing", type=int, choices=[0, 1], default=1)
+    p.add_argument("--detailed_cuda_timing", type=int, choices=[1], default=1)
+    p.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
     p.add_argument("--prune_embedding_head", type=int, choices=[0], default=0)
     p.add_argument("--warmup_iterations", type=int, choices=[0], default=0)
     p.add_argument("--evaluate_all_cores", type=int, choices=[0], default=0)
@@ -148,6 +150,7 @@ def main():
         f"[stage1-opt2] model_ready compiled={compiled} batch={a.batch_size} "
         f"channels_last={a.channels_last} pinned_d2h={a.pinned_d2h} "
         f"detailed_cuda_timing={a.detailed_cuda_timing} "
+        f"retain_gather_host_buffers={a.retain_gather_host_buffers} "
         f"prune_embedding={a.prune_embedding_head} warmup_ms={warmup_ms:.1f}",
         flush=True,
     )
@@ -212,6 +215,7 @@ def main():
             pinned_d2h=bool(a.pinned_d2h),
             require_compiled=bool(a.compile_model),
             detailed_cuda_timing=bool(a.detailed_cuda_timing),
+            retain_gather_host_buffers=bool(a.retain_gather_host_buffers),
         )
         infer_ms = (time.perf_counter() - t0) * 1000.0
         center = extract_center_metadata(frame)
@@ -241,6 +245,7 @@ def main():
             "compile_mode": a.compile_mode if a.compile_model else "disabled",
             "pinned_d2h": bool(a.pinned_d2h),
             "detailed_cuda_timing": bool(a.detailed_cuda_timing),
+            "retain_gather_host_buffers": bool(a.retain_gather_host_buffers),
             "prune_embedding_head": bool(a.prune_embedding_head),
             "warmup_iterations": int(a.warmup_iterations),
             "model_warmup_ms": float(warmup_ms),
@@ -275,6 +280,7 @@ def main():
             "compile_mode": a.compile_mode if a.compile_model else "disabled",
             "prune_embedding_head": int(a.prune_embedding_head),
             "detailed_cuda_timing": int(a.detailed_cuda_timing),
+            "retain_gather_host_buffers": int(a.retain_gather_host_buffers),
             "stage1_artifact_write_ms": artifact_write_ms,
             "stage1_manifest_write_ms": manifest_write_ms,
             "slice_total_ms": (time.perf_counter() - slice_t0) * 1000.0,

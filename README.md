@@ -36,6 +36,22 @@ Key entry points:
 
 See [`ops/v4_full_dataset/README_FULL_DATASET_RUN.md`](ops/v4_full_dataset/README_FULL_DATASET_RUN.md) for the operational runbook.
 
+## Stage 1 inference performance experiments
+
+Production-preserving Stage 1 execution experiments are isolated under
+[`ops/v4_stage1_inference_opt2/`](ops/v4_stage1_inference_opt2/). They keep the
+accepted checkpoint, calibration, complete model, active-GPU BF16 path, batch
+size 12, channels-last layout, patch/core geometry, fusion, thresholds and
+serialization unchanged. Candidate promotion requires exact comparison with
+the saved production outputs (`SCORE_ATOL=0`); this is an implementation guard,
+not evaluation against the incomplete ground-truth labels.
+
+E0 is the accepted control. E2, which removed detailed CUDA timing events, was
+rejected after a full-dataset attempt changed a production pole score. E3 keeps
+the E0 CUDA event sequence and tests only extending the lifetime of pinned
+gather-index buffers through the existing end-of-slice synchronization. See the
+experiment README for the E0 Nsight and E3 execution gates.
+
 ## Repository layout
 
 ```text
@@ -43,7 +59,8 @@ Pole_Line_3D_Recon/
 ├── README.md
 ├── v4/                        # accepted production V4 implementation
 ├── ops/
-│   └── v4_full_dataset/       # full-dataset operational tooling
+│   ├── v4_full_dataset/       # full-dataset operational tooling
+│   └── v4_stage1_inference_opt2/ # production-gated Stage 1 performance work
 └── ...                        # legacy/experimental V6.2 files retained for history and research
 ```
 

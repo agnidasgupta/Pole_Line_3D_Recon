@@ -19,7 +19,7 @@ import torch
 import v4_realtime_core as reference
 
 
-OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-production-equivalent-20260917"
+OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e3-pinned-gather-lifetime-20260917"
 
 
 def active_core_groups_opt(
@@ -184,6 +184,7 @@ def _predict_active_gpu_opt(
     pinned_d2h: bool,
     require_compiled: bool,
     detailed_cuda_timing: bool,
+    retain_gather_host_buffers: bool,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -226,6 +227,7 @@ def _predict_active_gpu_opt(
         "host_output_reused": 0,
         "pinned_d2h": int(bool(pinned_d2h)),
         "detailed_cuda_timing": int(bool(detailed_cuda_timing)),
+        "retain_gather_host_buffers": int(bool(retain_gather_host_buffers)),
         "fixed_batch_shape": int(bool(fixed_batch_shape)),
         "batches": 0,
     }
@@ -294,6 +296,12 @@ def _predict_active_gpu_opt(
     feature_events = []
     model_events = []
     gather_events = []
+    # The gather indices are copied asynchronously from pinned host memory.
+    # E3 retains those source tensors until the existing end-of-slice CUDA
+    # synchronization instead of allowing the pinned allocator to reclaim them
+    # between batches.  CUDA operations, model execution and output decisions
+    # remain unchanged.
+    gather_host_refs = []
 
     for start in range(0, len(groups), int(batch_size)):
         bg = groups[start:start + int(batch_size)]
@@ -362,6 +370,8 @@ def _predict_active_gpu_opt(
             dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
             take_host, take_pinned = reference._pin_numpy_tensor(take_np, torch.int64)
             dest_host, dest_pinned = reference._pin_numpy_tensor(dest_np, torch.int64)
+            if retain_gather_host_buffers:
+                gather_host_refs.extend((take_host, dest_host))
             take = take_host.to(device, non_blocking=bool(take_pinned))
             dest = dest_host.to(device, non_blocking=bool(dest_pinned))
             pcore = ps[:real_count, sl, sl, sl].contiguous().view(-1)
@@ -391,6 +401,9 @@ def _predict_active_gpu_opt(
         score_cpu = score_device.cpu().numpy()
         semantic_cpu = semantic_gpu.cpu().numpy()
         torch.cuda.synchronize()
+    # All asynchronous index copies are complete after the synchronization
+    # above, so E3 can now release the retained pinned host tensors safely.
+    gather_host_refs.clear()
     timing["d2h_gather_ms"] = (time.perf_counter() - d2h_t0) * 1000.0
     timing["gpu_workspace_reset_ms"] = _event_ms(reset_event)
     timing["sparse_h2d_cuda_ms"] = _event_ms(h2d)
@@ -429,6 +442,7 @@ def predict_v4_sparse_rows_opt(
     pinned_d2h: bool = False,
     require_compiled: bool = False,
     detailed_cuda_timing: bool = True,
+    retain_gather_host_buffers: bool = False,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -447,4 +461,5 @@ def predict_v4_sparse_rows_opt(
         item, model, cfg, calibration, grid_size, int(core_size), int(batch_size), amp,
         bool(channels_last), bool(fixed_batch_shape), workspace,
         bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
+        bool(retain_gather_host_buffers),
     )
