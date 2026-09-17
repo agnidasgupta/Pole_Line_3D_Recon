@@ -149,11 +149,23 @@ class V4SparseGpuWorkspace:
         return self.host_scores[:rows], self.host_semantic[:rows], allocated
 
 
-def _event_pair():
+class _NoopCudaEvent:
+    def record(self) -> None:
+        return None
+
+
+_NOOP_EVENT_PAIR = (_NoopCudaEvent(), _NoopCudaEvent())
+
+
+def _event_pair(enabled: bool = True):
+    if not enabled:
+        return _NOOP_EVENT_PAIR
     return torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
 
 
 def _event_ms(pair) -> float:
+    if pair is _NOOP_EVENT_PAIR:
+        return float("nan")
     return float(pair[0].elapsed_time(pair[1]))
 
 
@@ -171,6 +183,7 @@ def _predict_active_gpu_opt(
     workspace: V4SparseGpuWorkspace,
     pinned_d2h: bool,
     require_compiled: bool,
+    detailed_cuda_timing: bool,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -212,6 +225,7 @@ def _predict_active_gpu_opt(
         "workspace_reused": 0,
         "host_output_reused": 0,
         "pinned_d2h": int(bool(pinned_d2h)),
+        "detailed_cuda_timing": int(bool(detailed_cuda_timing)),
         "fixed_batch_shape": int(bool(fixed_batch_shape)),
         "batches": 0,
     }
@@ -226,7 +240,7 @@ def _predict_active_gpu_opt(
 
     channels = 2 if use_dist else 1
     device = torch.device("cuda")
-    reset_event = _event_pair()
+    reset_event = _event_pair(detailed_cuda_timing)
     reset_event[0].record()
     prepare_t0 = time.perf_counter()
     data_volume, low_pad, previous_coords, allocated = workspace.acquire(
@@ -252,13 +266,13 @@ def _predict_active_gpu_opt(
     timing["host_pin_ms"] = (time.perf_counter() - pin_t0) * 1000.0
     timing["host_pinned"] = int(bool(pinned_coords and (pinned_dist if use_dist else True)))
 
-    h2d = _event_pair()
+    h2d = _event_pair(detailed_cuda_timing)
     h2d[0].record()
     coords_gpu = coords_host.to(device, non_blocking=bool(pinned_coords))
     dist_gpu = dist_host.to(device, non_blocking=bool(pinned_dist)) if use_dist else None
     h2d[1].record()
 
-    scatter = _event_pair()
+    scatter = _event_pair(detailed_cuda_timing)
     scatter[0].record()
     xx = coords_gpu[:, 0] + int(low_pad[0])
     yy = coords_gpu[:, 1] + int(low_pad[1])
@@ -288,7 +302,7 @@ def _predict_active_gpu_opt(
             continue
         centers = [np.asarray(g["center"], dtype=np.int64) for g in bg]
 
-        pe = _event_pair()
+        pe = _event_pair(detailed_cuda_timing)
         pe[0].record()
         patches = []
         for center in centers:
@@ -310,7 +324,7 @@ def _predict_active_gpu_opt(
         pe[1].record()
         patch_events.append(pe)
 
-        fe = _event_pair()
+        fe = _event_pair(detailed_cuda_timing)
         fe[0].record()
         if use_coord:
             xb = reference.assemble_v4_channels_gpu(
@@ -321,7 +335,7 @@ def _predict_active_gpu_opt(
         fe[1].record()
         feature_events.append(fe)
 
-        me = _event_pair()
+        me = _event_pair(detailed_cuda_timing)
         me[0].record()
         model, ps, ls, sem, obj = reference._run_model_scores(
             model, xb, calibration, amp, fallback_state
@@ -341,7 +355,7 @@ def _predict_active_gpu_opt(
                 dest_rows.append(rr)
         timing["gpu_gather_plan_ms"] += (time.perf_counter() - gather_plan_t0) * 1000.0
 
-        ge = _event_pair()
+        ge = _event_pair(detailed_cuda_timing)
         ge[0].record()
         if offsets:
             take_np = np.concatenate(offsets).astype(np.int64, copy=False)
@@ -412,8 +426,9 @@ def predict_v4_sparse_rows_opt(
     gpu_coord_channels: bool = True,
     fixed_batch_shape: bool = True,
     workspace: V4SparseGpuWorkspace | None = None,
-    pinned_d2h: bool = True,
+    pinned_d2h: bool = False,
     require_compiled: bool = False,
+    detailed_cuda_timing: bool = True,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -431,5 +446,5 @@ def predict_v4_sparse_rows_opt(
     return _predict_active_gpu_opt(
         item, model, cfg, calibration, grid_size, int(core_size), int(batch_size), amp,
         bool(channels_last), bool(fixed_batch_shape), workspace,
-        bool(pinned_d2h), bool(require_compiled),
+        bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
     )

@@ -21,7 +21,8 @@ COMPILE_MODEL=${COMPILE_MODEL:-0}
 COMPILE_MODE=${COMPILE_MODE:-default}
 BATCH_SIZE=${BATCH_SIZE:-12}
 CHANNELS_LAST=${CHANNELS_LAST:-1}
-PINNED_D2H=${PINNED_D2H:-1}
+PINNED_D2H=${PINNED_D2H:-0}
+DETAILED_CUDA_TIMING=${DETAILED_CUDA_TIMING:-1}
 PRUNE_EMBEDDING_HEAD=${PRUNE_EMBEDDING_HEAD:-0}
 WARMUP_ITERATIONS=${WARMUP_ITERATIONS:-0}
 RUN_ID="${RUN_STAMP}_${VARIANT_NAME}"
@@ -54,6 +55,7 @@ group_id() {
 [[ "$COMPILE_MODEL" = 0 ]] || fail "production-preserving experiments require COMPILE_MODEL=0"
 [[ "$CHANNELS_LAST" = 1 ]] || fail "production-preserving experiments require CHANNELS_LAST=1"
 [[ "$PINNED_D2H" =~ ^[01]$ ]] || fail "PINNED_D2H must be 0 or 1"
+[[ "$DETAILED_CUDA_TIMING" =~ ^[01]$ ]] || fail "DETAILED_CUDA_TIMING must be 0 or 1"
 [[ "$PRUNE_EMBEDDING_HEAD" = 0 ]] || fail "production-preserving experiments require PRUNE_EMBEDDING_HEAD=0"
 [[ "$WARMUP_ITERATIONS" = 0 ]] || fail "production-preserving experiments require WARMUP_ITERATIONS=0"
 [[ "$BATCH_SIZE" = 12 ]] || fail "production-preserving experiments require BATCH_SIZE=12"
@@ -110,6 +112,7 @@ echo "baseline_stage1_calibration_path=$baseline_calibration_path"
 echo "runtime=active_gpu amp=bf16 batch_size=$BATCH_SIZE fixed_batch_shape=1"
 echo "compile_model=$COMPILE_MODEL compile_mode=$COMPILE_MODE channels_last=$CHANNELS_LAST"
 echo "pinned_d2h=$PINNED_D2H prune_embedding_head=$PRUNE_EMBEDDING_HEAD warmup_iterations=$WARMUP_ITERATIONS"
+echo "detailed_cuda_timing=$DETAILED_CUDA_TIMING"
 echo "only_group_id=${ONLY_GROUP_ID:-ALL} expected_sessions=$EXPECTED_SESSIONS"
 echo "score_atol=$SCORE_ATOL"
 
@@ -156,6 +159,7 @@ compile_model=$COMPILE_MODEL
 compile_mode=$COMPILE_MODE
 channels_last=$CHANNELS_LAST
 pinned_d2h=$PINNED_D2H
+detailed_cuda_timing=$DETAILED_CUDA_TIMING
 prune_embedding_head=$PRUNE_EMBEDDING_HEAD
 warmup_iterations=$WARMUP_ITERATIONS
 only_group_id=$ONLY_GROUP_ID
@@ -216,6 +220,7 @@ for manifest in "${MANIFESTS[@]}"; do
       --progress_json "$progress_c" --batch_size "$BATCH_SIZE" --amp bf16 \
       --compile_model "$COMPILE_MODEL" --compile_mode "$COMPILE_MODE" \
       --channels_last "$CHANNELS_LAST" --pinned_d2h "$PINNED_D2H" \
+      --detailed_cuda_timing "$DETAILED_CUDA_TIMING" \
       --prune_embedding_head "$PRUNE_EMBEDDING_HEAD" --warmup_iterations "$WARMUP_ITERATIONS" \
       --evaluate_all_cores 0 --gpu_coord_channels 1 \
       --fixed_batch_shape 1 --resume "$RESUME" --max_slices 0 \
