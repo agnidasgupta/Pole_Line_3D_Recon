@@ -51,7 +51,7 @@ separate experiment branch:
 
 ```bash
 REPO=/Users/agni/dev/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
-ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_Positive_Safe_Experiments.zip
+ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_Positive_Safe_Experiments_v2.zip
 BRANCH=v4-stage1-inference-opt2
 
 git -C "$REPO" status --short
@@ -85,6 +85,29 @@ chmod +x "$REPO"/ops/v4_stage1_inference_opt2/*.sh
 ```
 
 Do not continue if the Nebius worktree contains unrelated changes.
+
+### Build the `torch.compile` image
+
+The accepted runtime image may not contain a C compiler. PyTorch Inductor/Triton
+requires one to build its CUDA launcher module. Build this derivative once:
+
+```bash
+OPS="$REPO/ops/v4_stage1_inference_opt2"
+
+BASE_IMAGE=va-v4-realtime:torch241-cu121 \
+OUTPUT_IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
+bash "$OPS/build_v4_stage1_opt2_compile_image.sh"
+```
+
+Successful validation ends with:
+
+```text
+TORCH_COMPILE_CUDA_SMOKE_OK
+V4_STAGE1_OPT2_COMPILE_IMAGE_OK
+```
+
+The derivative changes only the container toolchain by adding `build-essential`;
+it does not change PyTorch, CUDA, the checkpoint, calibration, or inference code.
 
 ## Run the most useful experiments
 
@@ -124,6 +147,7 @@ bash "$OPS/monitor_v4_stage1_opt2_experiment.sh"
 
 ```bash
 VARIANT_NAME=e1_compile_reduce_b12_cl1 \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=12 CHANNELS_LAST=1 PINNED_D2H=0 PRUNE_EMBEDDING_HEAD=0 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
@@ -137,6 +161,7 @@ separate variant; its compilation warm-up is longer.
 
 ```bash
 VARIANT_NAME=e2_compile_reduce_b12_cl0 \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=12 CHANNELS_LAST=0 PINNED_D2H=0 PRUNE_EMBEDDING_HEAD=0 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
@@ -153,6 +178,7 @@ Use the winning `CHANNELS_LAST` value from E1/E2:
 WINNING_LAYOUT=1  # set to 0 if E2 won
 
 VARIANT_NAME=e3_compile_pruned_b12 \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=12 CHANNELS_LAST="$WINNING_LAYOUT" PINNED_D2H=0 PRUNE_EMBEDDING_HEAD=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
@@ -168,6 +194,7 @@ if memory remains comfortable. Example for batch 16:
 
 ```bash
 VARIANT_NAME=e4_compile_pruned_b16 \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=16 CHANNELS_LAST="$WINNING_LAYOUT" PINNED_D2H=0 PRUNE_EMBEDDING_HEAD=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
@@ -182,6 +209,7 @@ Use the best compile/layout/batch settings and change only `PINNED_D2H`:
 
 ```bash
 VARIANT_NAME=e5_winner_pinned_d2h \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=16 CHANNELS_LAST="$WINNING_LAYOUT" PINNED_D2H=1 PRUNE_EMBEDDING_HEAD=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
@@ -236,6 +264,7 @@ unset ONLY_GROUP_ID
 export EXPECTED_SESSIONS=30
 
 VARIANT_NAME=winner_full30 \
+IMAGE=va-v4-realtime:torch241-cu121-opt2-compile \
 COMPILE_MODEL=1 COMPILE_MODE=reduce-overhead \
 BATCH_SIZE=16 CHANNELS_LAST="$WINNING_LAYOUT" PINNED_D2H=1 PRUNE_EMBEDDING_HEAD=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"

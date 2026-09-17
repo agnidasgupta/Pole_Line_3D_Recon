@@ -1,0 +1,13 @@
+ARG BASE_IMAGE=va-v4-realtime:torch241-cu121
+FROM ${BASE_IMAGE}
+
+USER root
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CC=/usr/bin/gcc
+ENV CXX=/usr/bin/g++
+

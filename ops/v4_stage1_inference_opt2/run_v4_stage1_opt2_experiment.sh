@@ -113,6 +113,16 @@ echo "pinned_d2h=$PINNED_D2H prune_embedding_head=$PRUNE_EMBEDDING_HEAD warmup_i
 echo "only_group_id=${ONLY_GROUP_ID:-ALL} expected_sessions=$EXPECTED_SESSIONS"
 echo "score_atol=$SCORE_ATOL"
 
+if [ "$COMPILE_MODEL" = 1 ]; then
+  echo "===== TORCH.COMPILE ENVIRONMENT PREFLIGHT ====="
+  docker run --rm --gpus all "$IMAGE" bash -lc '
+    set -euo pipefail
+    command -v "${CC:-cc}"
+    command -v "${CXX:-c++}"
+    "${CC:-cc}" --version | head -n 1
+  ' || fail "COMPILE_MODEL=1 requires an image containing a C/C++ compiler; build Dockerfile.torch-compile"
+fi
+
 echo "===== COMPILE AND SELF-TEST IN CUDA DOCKER ====="
 docker run --rm --gpus all \
   --mount "type=bind,source=$EXP_REPO/v4,target=/workspace/v4,readonly" \
@@ -279,6 +289,12 @@ for manifest in "${MANIFESTS[@]}"; do
     tail -n 80 "$log"
   fi
 done
+
+if [ "$failed" -ne 0 ] || [ "$accepted" -ne "$EXPECTED_SESSIONS" ]; then
+  echo "V4_STAGE1_OPT2_SESSION_EXECUTION_FAILED accepted=$accepted failed=$failed expected=$EXPECTED_SESSIONS"
+  echo "Timing summarization skipped because no complete, guarded candidate set exists."
+  exit 1
+fi
 
 docker run --rm \
   --mount "type=bind,source=$TOOL_DIR,target=/workspace/opt,readonly" \
