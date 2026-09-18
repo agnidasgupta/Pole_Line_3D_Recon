@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Sequence
 
 import numpy as np
@@ -19,7 +19,7 @@ import torch
 import v4_realtime_core as reference
 
 
-OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e4-precomputed-gather-plans-20260918"
+OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e5-coordinate-input-cache-20260918"
 
 
 def active_core_groups_opt(
@@ -172,6 +172,9 @@ class V4SparseGpuWorkspace:
     host_scores: torch.Tensor | None = None
     host_semantic: torch.Tensor | None = None
     host_output_capacity: int = 0
+    model_input: torch.Tensor | None = None
+    model_input_spec: tuple | None = None
+    coordinate_lines: dict = field(default_factory=dict)
 
     def reset(self) -> None:
         self.volume = None
@@ -182,6 +185,9 @@ class V4SparseGpuWorkspace:
         self.host_scores = None
         self.host_semantic = None
         self.host_output_capacity = 0
+        self.model_input = None
+        self.model_input_spec = None
+        self.coordinate_lines.clear()
 
     def acquire(self, grid_size, patch_size: int, core_size: int, channels: int, device):
         gx, gy, gz = map(int, grid_size)
@@ -223,6 +229,97 @@ class V4SparseGpuWorkspace:
             self.host_output_capacity = rows
         return self.host_scores[:rows], self.host_semantic[:rows], allocated
 
+    def acquire_model_input(self, batch: int, channels: int, patch: int, device):
+        """Return a reusable FP32 channels-last model-input tensor."""
+        shape = (int(batch), int(channels), int(patch), int(patch), int(patch))
+        spec = (shape, str(torch.device(device)), torch.float32)
+        allocated = self.model_input is None or self.model_input_spec != spec
+        if allocated:
+            self.model_input = torch.empty(
+                shape,
+                device=device,
+                dtype=torch.float32,
+                memory_format=torch.channels_last_3d,
+            )
+            self.model_input_spec = spec
+        return self.model_input, allocated
+
+    def coordinate_line(
+        self,
+        axis: int,
+        center: int,
+        extent: int,
+        patch: int,
+        device,
+    ):
+        """Cache the exact FP32 one-dimensional V4 coordinate-channel values."""
+        key = (
+            int(axis), int(center), int(extent), int(patch), str(torch.device(device))
+        )
+        line = self.coordinate_lines.get(key)
+        hit = line is not None
+        if line is None:
+            center_tensor = torch.tensor(
+                float(center), device=device, dtype=torch.float32
+            )
+            offsets = torch.arange(int(patch), device=device, dtype=torch.float32)
+            line = center_tensor + offsets - int(patch) // 2
+            line = ((line / max(int(extent) - 1, 1)) * 2.0 - 1.0).clamp(
+                -1.5, 1.5
+            )
+            self.coordinate_lines[key] = line
+        return line, hit
+
+
+def assemble_v4_channels_cached_opt(
+    data_tensor: torch.Tensor,
+    centers_xyz: Sequence[Sequence[int]],
+    grid_size,
+    patch_size: int,
+    use_coord: bool,
+    use_dist: bool,
+    workspace: V4SparseGpuWorkspace,
+):
+    """Build the exact V4 input in a reusable channels-last buffer.
+
+    E5 caches only deterministic coordinate lines. Dynamic occupancy and
+    distance channels are copied from the unchanged E0 patch tensor. The final
+    tensor has the same values, shape, dtype and channels-last layout as E0.
+    """
+    if not use_coord:
+        raise ValueError("E5 coordinate caching requires production coordinate channels")
+    batch = int(data_tensor.shape[0])
+    patch = int(patch_size)
+    gx, gy, gz = map(int, grid_size)
+    channels = 5 if use_dist else 4
+    output, allocated = workspace.acquire_model_input(
+        batch, channels, patch, data_tensor.device
+    )
+
+    axis_lines = [[], [], []]
+    hits = 0
+    misses = 0
+    for center in centers_xyz:
+        values = tuple(map(int, center))
+        for axis, (value, extent) in enumerate(zip(values, (gx, gy, gz))):
+            line, hit = workspace.coordinate_line(
+                axis, value, extent, patch, data_tensor.device
+            )
+            axis_lines[axis].append(line)
+            hits += int(hit)
+            misses += int(not hit)
+
+    xv = torch.stack(axis_lines[0], dim=0)
+    yv = torch.stack(axis_lines[1], dim=0)
+    zv = torch.stack(axis_lines[2], dim=0)
+    output[:, 0].copy_(data_tensor[:, 0])
+    output[:, 1].copy_(xv[:, None, None, :].expand(batch, patch, patch, patch))
+    output[:, 2].copy_(yv[:, None, :, None].expand(batch, patch, patch, patch))
+    output[:, 3].copy_(zv[:, :, None, None].expand(batch, patch, patch, patch))
+    if use_dist:
+        output[:, 4].copy_(data_tensor[:, 1])
+    return output, int(not allocated), hits, misses
+
 
 class _NoopCudaEvent:
     def record(self) -> None:
@@ -261,6 +358,7 @@ def _predict_active_gpu_opt(
     detailed_cuda_timing: bool,
     retain_gather_host_buffers: bool,
     precompute_batch_gather_plans: bool,
+    cache_coordinate_channels: bool,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -311,6 +409,10 @@ def _predict_active_gpu_opt(
         "detailed_cuda_timing": int(bool(detailed_cuda_timing)),
         "retain_gather_host_buffers": int(bool(retain_gather_host_buffers)),
         "precompute_batch_gather_plans": int(bool(precompute_batch_gather_plans)),
+        "cache_coordinate_channels": int(bool(cache_coordinate_channels)),
+        "coordinate_cache_hits": 0,
+        "coordinate_cache_misses": 0,
+        "model_input_reused": 0,
         "fixed_batch_shape": int(bool(fixed_batch_shape)),
         "batches": 0,
     }
@@ -417,11 +519,18 @@ def _predict_active_gpu_opt(
 
         fe = _event_pair(detailed_cuda_timing)
         fe[0].record()
-        if use_coord:
+        if cache_coordinate_channels:
+            xb, input_reused, cache_hits, cache_misses = assemble_v4_channels_cached_opt(
+                xb, padded_centers, grid_size, patch, use_coord, use_dist, workspace
+            )
+            timing["model_input_reused"] += int(input_reused)
+            timing["coordinate_cache_hits"] += int(cache_hits)
+            timing["coordinate_cache_misses"] += int(cache_misses)
+        elif use_coord:
             xb = reference.assemble_v4_channels_gpu(
                 xb, padded_centers, grid_size, patch, use_coord, use_dist
             )
-        if channels_last:
+        if channels_last and not cache_coordinate_channels:
             xb = xb.contiguous(memory_format=torch.channels_last_3d)
         fe[1].record()
         feature_events.append(fe)
@@ -530,6 +639,7 @@ def predict_v4_sparse_rows_opt(
     detailed_cuda_timing: bool = True,
     retain_gather_host_buffers: bool = False,
     precompute_batch_gather_plans: bool = False,
+    cache_coordinate_channels: bool = False,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -549,4 +659,5 @@ def predict_v4_sparse_rows_opt(
         bool(channels_last), bool(fixed_batch_shape), workspace,
         bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
         bool(retain_gather_host_buffers), bool(precompute_batch_gather_plans),
+        bool(cache_coordinate_channels),
     )

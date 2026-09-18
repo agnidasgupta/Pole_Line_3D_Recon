@@ -47,13 +47,13 @@ the saved production outputs (`SCORE_ATOL=0`); this is an implementation guard,
 not evaluation against the incomplete ground-truth labels.
 
 E0 is the accepted control. E2 was rejected after removing detailed CUDA events
-changed a production pole score. E3 was exact on its representative session but
-its 0.23% unprofiled difference was noise and its profiled wall time was slightly
-slower, so it is also rejected. The next isolated candidate, E4, precomputes the
-same deterministic per-batch gather plans from E0's stable core schedule. It
-does not change model inputs, model execution, fusion, thresholds, predictions
-or serialization. See the experiment README for the E0 Nsight findings and E4
-execution gates.
+changed a production pole score. E3 produced no repeatable benefit. E4 remained
+exact in two representative runs but saved only 0.37% on average and was rejected
+as operationally insignificant. E5 tests an exact coordinate-channel cache and
+reusable channels-last input buffer while leaving the complete model, heads and
+output decisions unchanged. See the experiment README and inference-complexity
+audit for its gates and for model/training changes that are outside the V4
+production contract.
 
 ## Repository layout
 

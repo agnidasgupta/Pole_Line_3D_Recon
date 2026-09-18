@@ -10,6 +10,7 @@ from v4_realtime_core_opt2 import (
     V4SparseGpuWorkspace,
     active_core_groups_opt,
     active_core_schedule_with_batch_plans_opt,
+    assemble_v4_channels_cached_opt,
     exact_padding,
     predict_v4_sparse_rows_opt,
 )
@@ -104,6 +105,31 @@ def main():
     workspace = V4SparseGpuWorkspace()
     e3_workspace = V4SparseGpuWorkspace()
     e4_workspace = V4SparseGpuWorkspace()
+    e5_workspace = V4SparseGpuWorkspace()
+    assembly_workspace = V4SparseGpuWorkspace()
+    assembly_data = torch.randn(
+        (12, 2, 64, 64, 64), device="cuda", dtype=torch.float32
+    )
+    assembly_centers = [
+        np.asarray([24 + 48 * (index % 4), 24 + 48 * ((index // 4) % 3), 24])
+        for index in range(12)
+    ]
+    expected_input = reference.assemble_v4_channels_gpu(
+        assembly_data, assembly_centers, (400, 400, 200), 64, True, True
+    ).contiguous(memory_format=torch.channels_last_3d)
+    actual_input, reused, _, misses = assemble_v4_channels_cached_opt(
+        assembly_data, assembly_centers, (400, 400, 200), 64, True, True,
+        assembly_workspace,
+    )
+    assert torch.equal(expected_input, actual_input)
+    assert actual_input.is_contiguous(memory_format=torch.channels_last_3d)
+    assert reused == 0 and misses > 0
+    actual_input, reused, _, misses = assemble_v4_channels_cached_opt(
+        assembly_data, assembly_centers, (400, 400, 200), 64, True, True,
+        assembly_workspace,
+    )
+    assert torch.equal(expected_input, actual_input)
+    assert reused == 1 and misses == 0
     boundary = np.asarray(
         [[0, 0, 0], [96, 82, 64], [48, 48, 48], [80, 60, 20], [7, 75, 63]],
         dtype=np.int32,
@@ -153,6 +179,20 @@ def main():
             assert delta == 0.0, (seed, "e4", name, delta)
         assert np.array_equal(expected["semantic"], e4["semantic"])
         assert e4["timing"]["precompute_batch_gather_plans"] == 1
+        e5 = predict_v4_sparse_rows_opt(
+            item, model, cfg, calibration, grid_size=grid, core_size=48,
+            batch_size=12, amp="bf16", evaluate_all_cores=False,
+            gpu_coord_channels=True, fixed_batch_shape=True,
+            workspace=e5_workspace, pinned_d2h=False,
+            detailed_cuda_timing=True, retain_gather_host_buffers=False,
+            precompute_batch_gather_plans=False,
+            cache_coordinate_channels=True,
+        )
+        for name in ("pole", "line", "objectness"):
+            delta = float(np.max(np.abs(expected[name] - e5[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e5", name, delta)
+        assert np.array_equal(expected["semantic"], e5["semantic"])
+        assert e5["timing"]["cache_coordinate_channels"] == 1
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")

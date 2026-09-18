@@ -75,6 +75,7 @@ def main():
             "detailed_cuda_timing": info.get("detailed_cuda_timing"),
             "retain_gather_host_buffers": info.get("retain_gather_host_buffers", "0"),
             "precompute_batch_gather_plans": info.get("precompute_batch_gather_plans", "0"),
+            "cache_coordinate_channels": info.get("cache_coordinate_channels", "0"),
             "prune_embedding_head": info.get("prune_embedding_head"),
             "run_root": str(root),
         }

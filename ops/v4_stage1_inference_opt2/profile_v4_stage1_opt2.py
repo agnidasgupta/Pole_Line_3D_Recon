@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile an accepted E0/E3/E4 run without writing Stage1 artifacts."""
+"""Profile an accepted E0/E3/E4/E5 run without writing Stage1 artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("--iterations", type=int, default=5)
     parser.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
     parser.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--cache_coordinate_channels", type=int, choices=[0, 1], default=0)
     parser.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
     args = parser.parse_args()
     if args.warmup < 0 or args.iterations < 1:
@@ -68,6 +69,7 @@ def main():
             detailed_cuda_timing=True,
             retain_gather_host_buffers=bool(args.retain_gather_host_buffers),
             precompute_batch_gather_plans=bool(args.precompute_batch_gather_plans),
+            cache_coordinate_channels=bool(args.cache_coordinate_channels),
         )
 
     for _ in range(args.warmup):
@@ -77,7 +79,9 @@ def main():
     wall_ms = []
     component_rows = []
     torch.cuda.cudart().cudaProfilerStart()
-    if args.precompute_batch_gather_plans:
+    if args.cache_coordinate_channels:
+        variant = "e5_coordinate_input_cache"
+    elif args.precompute_batch_gather_plans:
         variant = "e4_precomputed_batch_gather_plans"
     elif args.retain_gather_host_buffers:
         variant = "e3_retain_gather_host_buffers"
@@ -132,6 +136,7 @@ def main():
             "detailed_cuda_timing": True,
             "retain_gather_host_buffers": bool(args.retain_gather_host_buffers),
             "precompute_batch_gather_plans": bool(args.precompute_batch_gather_plans),
+            "cache_coordinate_channels": bool(args.cache_coordinate_channels),
             "full_model_heads": True,
             "patch_size": int(cfg.get("patch_size", 64)),
             "core_size": 48,
