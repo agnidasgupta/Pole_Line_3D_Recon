@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Assert production span semantics: 9 x 50-ft sequence intervals = 450 ft, up to 10 centers."""
-from __future__ import annotations
-import argparse
-
-def main():
-    latest=20; gap=9; first=latest-gap; seqs=list(range(first,latest+1))
-    assert first==11 and len(seqs)==10 and (latest-first)*50==450
-    assert 10 not in seqs and 21 not in seqs
-    print(f'V4_450FT_WINDOW_OK first={first} latest={latest} sequence_gap={gap} observed_centers={len(seqs)} span_ft={(latest-first)*50}')
-if __name__=='__main__':main()
+"""Compatibility entry point; implementation: tests/v4/smoke_test_v4_450ft_window.py."""
+from pathlib import Path as _Path
+import sys as _sys
+_root = _Path(__file__).absolute().parents[1]
+if not (_root / "src" / "poleline").is_dir():
+    _root = _Path("/workspace/poleline_repo")
+_sys.path.insert(0, str(_root / "src"))
+from poleline._compat import execute as _execute
+_execute(globals(), 'tests/v4/smoke_test_v4_450ft_window.py')

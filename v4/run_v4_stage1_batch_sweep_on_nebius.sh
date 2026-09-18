@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# Runtime gate now includes batch-size tuning so runtime mode and batch shape remain one validated decision.
-exec "$HERE/run_v4_runtime_variant_gate_on_nebius.sh"
+# Compatibility launcher; implementation: scripts/deploy/run_v4_stage1_batch_sweep_on_nebius.sh
+_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/deploy/run_v4_stage1_batch_sweep_on_nebius.sh"
+if [[ ! -f "$_poleline_script" ]]; then
+  _poleline_script="/workspace/poleline_repo/scripts/deploy/run_v4_stage1_batch_sweep_on_nebius.sh"
+fi
+source "$_poleline_script"

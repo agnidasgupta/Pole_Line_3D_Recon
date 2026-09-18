@@ -1,96 +1,53 @@
 # Pole_Line_3D_Recon
 
-Production and experimental code for three-stage pole and power-line reconstruction from voxelized LiDAR slices.
+V4 voxel inference and pole/power-line reconstruction. This layout branch is based on `4e45f533021bdbe17a3c9227448e84e7236e15cf` (`v4-stage1-inference-opt2`).
 
-## Active production version: V4
-
-The accepted production implementation is under [`v4/`](v4/).
-
-Production configuration:
-
-- Stage 1: per-slice voxel inference using the accepted V4 `MultiHeadVoxelNet3D` weights.
-- Stage 2: per-slice pole and conductor-segment reconstruction from Stage 1 scores.
-- Stage 3: rolling multi-slice world reconstruction using only already-acquired slices.
-- Stage 3 window: maximum sequence gap 9 at 50 ft per slice interval, i.e. 450 ft maximum physical span and up to 10 observed slice centers in `[S-9, S]`.
-- Accepted Stage 1 runtime: `active_gpu`.
-- Accepted batch size: `12`.
-- Python execution on Nebius is Docker-only.
-- Stage 1, Stage 2, and Stage 3 remain independently executable from durable saved stage outputs.
-
-See [`v4/README.md`](v4/README.md) for architecture, acceptance results, runtime details, and Nebius production workflows.
-
-## Full-dataset operations
-
-Operational helpers for running the accepted V4 implementation over every discovered valid session are under [`ops/v4_full_dataset/`](ops/v4_full_dataset/).
-
-Key entry points:
-
-- `run_v4_all_stage1_on_nebius.sh` — Stage 1 only over all discovered sessions.
-- `run_v4_all_stage2_on_nebius.sh` — Stage 2 only from saved Stage 1 outputs.
-- `run_v4_all_stage3_on_nebius.sh` — Stage 3 only from saved Stage 2 outputs.
-- `run_v4_all_reconstruction_on_nebius.sh` — Stage 2 + Stage 3.
-- `run_v4_all_in_one_on_nebius.sh` — complete all-data workflow.
-- `package_v4_all_data_results_on_nebius.sh` — package metrics, timings, inference CSVs, and reconstruction outputs while excluding NPZ/model artifacts.
-- `download_v4_all_data_results_to_mac.sh` — download packaged results to macOS.
-- `make_v4_compact_review_from_results_on_mac.sh` — create a compact review archive from a large all-data result package.
-
-See [`ops/v4_full_dataset/README_FULL_DATASET_RUN.md`](ops/v4_full_dataset/README_FULL_DATASET_RUN.md) for the operational runbook.
-
-## Stage 1 inference performance experiments
-
-Production-preserving Stage 1 execution experiments are isolated under
-[`ops/v4_stage1_inference_opt2/`](ops/v4_stage1_inference_opt2/). They keep the
-accepted checkpoint, calibration, complete model, active-GPU BF16 path, batch
-size 12, channels-last layout, patch/core geometry, fusion, thresholds and
-serialization unchanged. Candidate promotion requires exact comparison with
-the saved production outputs (`SCORE_ATOL=0`); this is an implementation guard,
-not evaluation against the incomplete ground-truth labels.
-
-E0 is the accepted control. E2 was rejected after removing detailed CUDA events
-changed a production pole score. E3 produced no repeatable benefit. E4 remained
-exact in two representative runs but saved only 0.37% on average and was rejected
-as operationally insignificant. E5 tests an exact coordinate-channel cache and
-reusable channels-last input buffer while leaving the complete model, heads and
-output decisions unchanged. See the experiment README and inference-complexity
-audit for its gates and for model/training changes that are outside the V4
-production contract.
-
-## Repository layout
+## Layout
 
 ```text
-Pole_Line_3D_Recon/
-├── README.md
-├── v4/                        # accepted production V4 implementation
-├── ops/
-│   ├── v4_full_dataset/       # full-dataset operational tooling
-│   └── v4_stage1_inference_opt2/ # production-gated Stage 1 performance work
-└── ...                        # legacy/experimental V6.2 files retained for history and research
+src/poleline/
+  stage1/       # Model, sparse inference, preprocessing facade
+  stage2/       # Refiners, V10 reconstruction, geometry/graph facades
+  stage3/       # Rolling multi-slice reconstruction
+  training/     # Stage 1 and Stage 2 training, component mining
+  io/           # Durable stage contracts
+  cli/          # Original generic V4 command implementations
+  pipeline.py
+scripts/        # Deployment, full-dataset operations, validation
+experiments/    # Opt1/Opt2, electrical V10, Unity integrations
+benchmarks/     # Profiling, comparisons, mock H100 validation
+configs/        # Configuration guidance; no invented production calibration
+docker/        # Dockerfile alias and build instructions
+tests/         # Existing smoke tests and migration equivalence checks
+docs/          # Layout map, validation report, historical documentation
+legacy/v62/    # Older root-level implementation
+artifacts/     # Ignored generated results
+v4/, ops/      # Compatibility entry points for existing commands
 ```
 
-The root-level V6.2 files are retained as historical/experimental work. They are not the active production implementation on the `v4` branch.
+The moved computation files retain their original bytes. Compatibility adapters preserve historical imports, CLI behavior, and location-based file discovery. See [layout details](docs/LAYOUT.md) and [validation results](docs/LAYOUT_VALIDATION.md).
 
-## External artifacts intentionally not stored in Git
+## Use
 
-This repository must not contain raw datasets, generated outputs, Stage 1 NPZ caches, trained model/checkpoint files, calibration bundles, or other large runtime artifacts.
+Use an editable checkout in an environment with the appropriate PyTorch/CUDA build:
 
-Typical external locations on Nebius include:
-
-```text
-/data/voxel_csv_combined
-/outputs/poleline_voxel_run_session_groups/precision_v4/train/precision_best.pt
-/outputs/poleline_voxel_run_session_groups/precision_v4/full_val/calibration.json
-/workspace/voxel_poleline/outputs
+```sh
+python -m pip install -e .
+python v4/run_v4_stage1.py --help
+python v4/run_v4_stage2.py --help
+python v4/run_v4_stage3.py --help
 ```
 
-## Git hygiene
+`poleline-stage1`, `poleline-stage2`, `poleline-stage3`, and `poleline-session` expose those same generic V4 entry points. **The generic Stage 2 command does not select electrical V10.** Continue using the documented [Stage 1 Opt2](experiments/v4_stage1_inference_opt2/README.md) and electrical V10 Opt commands under `ops/v4_stage2_stage1_electrical_v10_opt/` for those experiments. Historical `ops/` paths remain aliases.
 
-Before every push:
+Use the original [V4 production guide](v4/README.md) for checkpoint, calibration, runtime, and deployment arguments. Existing defaults are retained. This package currently requires the source checkout; a standalone wheel is not supported.
 
-```bash
-git status --short
-git diff --cached --stat
-git diff --cached --name-only | grep -Ei '\.(npz|pt|pth|ckpt|joblib|onnx|engine|safetensors|csv|csv\.gz)$' || true
-git diff --cached --name-only | grep -E '(^|/)(__pycache__|\.DS_Store|\._)' || true
-```
+## Data flow
 
-Generated data/model artifacts and macOS metadata should not be committed.
+1. Stage 1 reads voxelized slices, assembles occupancy/distance/coordinate patches, runs MultiHeadVoxelNet3D, and gathers per-voxel scores and labels into durable outputs.
+2. Stage 2 builds components and features, applies the supplied refiners, and reconstructs poles and conductor geometry. The electrical V10 implementation uses Stage 1 electrical tracks.
+3. Stage 3 joins already-acquired slices into a rolling world reconstruction, retaining the original 450 ft window contract.
+
+The accepted checkpoint and calibration are external artifacts. Synthetic fixtures exercise the code but cannot establish production model quality or production output equivalence.
+
+Historical root documentation is preserved in [the original README](docs/archive/README.original.md).

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$SCRIPT_DIR/check_v62_teacher_status.sh" "$@"
+# Compatibility launcher; implementation: legacy/v62/check_v62_status.sh
+_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/legacy/v62/check_v62_status.sh"
+if [[ ! -f "$_poleline_script" ]]; then
+  _poleline_script="/workspace/poleline_repo/legacy/v62/check_v62_status.sh"
+fi
+source "$_poleline_script"

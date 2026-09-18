@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-exec "$HERE/download_v4_review_bundle_to_mac.sh"
+# Compatibility launcher; implementation: scripts/deploy/download_v4_realtime_results_to_mac.sh
+_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/deploy/download_v4_realtime_results_to_mac.sh"
+if [[ ! -f "$_poleline_script" ]]; then
+  _poleline_script="/workspace/poleline_repo/scripts/deploy/download_v4_realtime_results_to_mac.sh"
+fi
+source "$_poleline_script"

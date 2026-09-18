@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-import argparse,json
-
-def main():
-    p=argparse.ArgumentParser();p.add_argument('--gate_json',required=True);a=p.parse_args();d=json.load(open(a.gate_json));s=d.get('summary',{});fg=s.get('full_gpu',{})
-    if not fg.get('pass_recommended',False):raise SystemExit(f"FULL_GPU_EQUIVALENCE_FAILED: {fg}")
-    print(f"V4_RUNTIME_GATE_OK full_gpu=pass recommended={d.get('recommended_runtime')} active_gpu_pass={bool(s.get('active_gpu',{}).get('pass_recommended',False))}")
-if __name__=='__main__':main()
+"""Compatibility entry point; implementation: scripts/validation/validate_v4_runtime_gate.py."""
+from pathlib import Path as _Path
+import sys as _sys
+_root = _Path(__file__).absolute().parents[1]
+if not (_root / "src" / "poleline").is_dir():
+    _root = _Path("/workspace/poleline_repo")
+_sys.path.insert(0, str(_root / "src"))
+from poleline._compat import execute as _execute
+_execute(globals(), 'scripts/validation/validate_v4_runtime_gate.py')

@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
-exec ./run_v62_teacher_training.sh "$@"
+# Compatibility launcher; implementation: legacy/v62/run_v62_training.sh
+_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/legacy/v62/run_v62_training.sh"
+if [[ ! -f "$_poleline_script" ]]; then
+  _poleline_script="/workspace/poleline_repo/legacy/v62/run_v62_training.sh"
+fi
+source "$_poleline_script"

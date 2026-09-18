@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-{
-  while IFS= read -r f; do
-    (cd "$HERE" && sha256sum "$f")
-  done < <(find "$HERE" -maxdepth 1 -type f \( -name '*.py' -o -name '*.sh' -o -name 'requirements.txt' -o -name 'Dockerfile.v4_realtime' \) -printf '%f\n' | sort)
-} | sha256sum | awk '{print $1}'
+# Compatibility launcher; implementation: scripts/deploy/v4_code_fingerprint.sh
+_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/deploy/v4_code_fingerprint.sh"
+if [[ ! -f "$_poleline_script" ]]; then
+  _poleline_script="/workspace/poleline_repo/scripts/deploy/v4_code_fingerprint.sh"
+fi
+source "$_poleline_script"

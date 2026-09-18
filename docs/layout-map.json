@@ -1,0 +1,819 @@
+{
+  "base_commit": "4e45f533021bdbe17a3c9227448e84e7236e15cf",
+  "moves": [
+    {
+      "old": "v4/voxel_common.py",
+      "new": "src/poleline/stage1/model.py",
+      "sha256": "ac323dbb6fd30bb68f17fd2b44fefc367fc6296bad9d5bd69f689e12c0e16c61",
+      "kind": "python"
+    },
+    {
+      "old": "v4/precision_common.py",
+      "new": "src/poleline/stage1/scoring.py",
+      "sha256": "3700743afc4b06995529c10719ea0918446f46ee439743c00ca4d27c6080f41a",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_realtime_core.py",
+      "new": "src/poleline/stage1/inference.py",
+      "sha256": "c382f99bffeca04cbeae98125e466f1e7505d85d0928e9e2a8dc8ca4b0cff7cf",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_realtime_pipeline.py",
+      "new": "src/poleline/pipeline.py",
+      "sha256": "0813e10357e26f90f663defd6e46528cd82518a226ce0de5280368953c1e5f8f",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_sparse_components.py",
+      "new": "src/poleline/stage2/components.py",
+      "sha256": "e9a3daadd62ead69d7ac5e17f5907cb2f6f968952bd299904080582c65d89db9",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_stage2_local.py",
+      "new": "src/poleline/stage2/features.py",
+      "sha256": "a5ca924204fa8646ed472ca00579011566575a052a04949ce0315f2d9d7fa026",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_stage2_runtime.py",
+      "new": "src/poleline/stage2/refinement.py",
+      "sha256": "aeb702210dcebea1fc7d69befb8e2340757a47a7af0c12b33887e1e31e4aa031",
+      "kind": "python"
+    },
+    {
+      "old": "v4/v4_stage_contracts.py",
+      "new": "src/poleline/io/contracts.py",
+      "sha256": "d667e4706b5f4ecf9b873e2a1ab15d1a8f74356b5df4bd2aa65a85f222571e13",
+      "kind": "python"
+    },
+    {
+      "old": "v4/reconstruct_v4_stage3.py",
+      "new": "src/poleline/stage3/reconstruction.py",
+      "sha256": "47aa8f9dee53c7119cbcdd7cacd28f9ae2b05b8d72c3de1fd6d2b0003bcfa240",
+      "kind": "python"
+    },
+    {
+      "old": "v4/train_v4_stage1.py",
+      "new": "src/poleline/training/stage1.py",
+      "sha256": "802f0aeb5e31869514ea9c8a781d27629e4d08fc4059a120ac4190851d96df64",
+      "kind": "python"
+    },
+    {
+      "old": "v4/train_v4_stage2_refiners.py",
+      "new": "src/poleline/training/stage2.py",
+      "sha256": "de357ae562d785f06831495c496fad05fd7effd9650927e19f827f55e03cddaf",
+      "kind": "python"
+    },
+    {
+      "old": "v4/mine_v4_stage2_components.py",
+      "new": "src/poleline/training/components.py",
+      "sha256": "6ec45041f1f3e640475a6e5cbd7155b52f3b43a0865a572fabbac605f5f46756",
+      "kind": "python"
+    },
+    {
+      "old": "v4/run_v4_stage1.py",
+      "new": "src/poleline/cli/stage1.py",
+      "sha256": "901a7391da986c78c10048a37f27427ea63a49a147797082b46d1ad92cdf7568",
+      "kind": "python"
+    },
+    {
+      "old": "v4/run_v4_stage2.py",
+      "new": "src/poleline/cli/stage2.py",
+      "sha256": "9115a7ac6b7806c3921851d16da8439de7e11d7ffb0e418ee282a32e90202a10",
+      "kind": "python"
+    },
+    {
+      "old": "v4/run_v4_stage3.py",
+      "new": "src/poleline/cli/stage3.py",
+      "sha256": "4f25a3d9041b60272c12906a4afb994a47495fc2296a6bb5db0de6e481ea75f4",
+      "kind": "python"
+    },
+    {
+      "old": "v4/run_v4_realtime_session.py",
+      "new": "src/poleline/cli/session.py",
+      "sha256": "c37cd9e8e826f41b349666833035942b3c536efd32591d1ce63f8fd6593b4136",
+      "kind": "python"
+    },
+    {
+      "old": "prepare_v62_dataset.py",
+      "new": "legacy/v62/prepare_v62_dataset.py",
+      "sha256": "91e15ea902964adb04614d1734cfdcb1dea3d92bfe758095feb0b5f8c18b17f4",
+      "kind": "python"
+    },
+    {
+      "old": "full_scene_evaluate_v6_stage1.py",
+      "new": "legacy/v62/full_scene_evaluate_v6_stage1.py",
+      "sha256": "f04c6641b4e8679c5c6a87cbabd2f4c8d7c6e39f4ca325473a64a68880bc9d60",
+      "kind": "python"
+    },
+    {
+      "old": "collect_v62_diagnostics.py",
+      "new": "legacy/v62/collect_v62_diagnostics.py",
+      "sha256": "6b35180699f2459345139ea6ba57a53e7a177bd03b548d0395728da80b84a0d3",
+      "kind": "python"
+    },
+    {
+      "old": "time_v62_one_session_inference.py",
+      "new": "legacy/v62/time_v62_one_session_inference.py",
+      "sha256": "29d3a40b02ab8a35f8785effba7759e7b447492371aca8744fc602b662b4ba43",
+      "kind": "python"
+    },
+    {
+      "old": "mine_v62_local_components.py",
+      "new": "legacy/v62/mine_v62_local_components.py",
+      "sha256": "e075baa1bd0a4eba14410ab1c832160b225f3c00e7d1256773805e9075be6939",
+      "kind": "python"
+    },
+    {
+      "old": "v6_predict.py",
+      "new": "legacy/v62/v6_predict.py",
+      "sha256": "ea55b5d7ca13ba1e45d2d33ac96d53492f7eefb45c9f3e5dafd6bf3bf4023920",
+      "kind": "python"
+    },
+    {
+      "old": "v6_common.py",
+      "new": "legacy/v62/v6_common.py",
+      "sha256": "1ffd8501095ff8aa8f3bf20c346a18be680c0b696bfbef8a4edb1a427b063bc3",
+      "kind": "python"
+    },
+    {
+      "old": "infer_v62_stage1_stage2.py",
+      "new": "legacy/v62/infer_v62_stage1_stage2.py",
+      "sha256": "baa491c6940cb1e45b39863a9c9f7afc660c185dddc3fc9a397298fc4c4566ac",
+      "kind": "python"
+    },
+    {
+      "old": "compare_v4_v62_line_metrics.py",
+      "new": "legacy/v62/compare_v4_v62_line_metrics.py",
+      "sha256": "d16e60e02e384a82c4e7630dd472afeafe4c0ca25d51ac79265c464e0b31812f",
+      "kind": "python"
+    },
+    {
+      "old": "reconstruct_v62_stage3.py",
+      "new": "legacy/v62/reconstruct_v62_stage3.py",
+      "sha256": "96d2d4af17af10913bc9391d2c834cd9f6844a7f9ff934d362e44e8564e8688a",
+      "kind": "python"
+    },
+    {
+      "old": "precision_common.py",
+      "new": "legacy/v62/precision_common.py",
+      "sha256": "7c7f157b2949e3ac4ede5b1b73b44eee223ec5ae4df6c9b28234f456c2428054",
+      "kind": "python"
+    },
+    {
+      "old": "train_v62_local_refiners.py",
+      "new": "legacy/v62/train_v62_local_refiners.py",
+      "sha256": "e07b9e5acc9c9ed8e22ecad5d6fcccf11778cf03590aca9a778748a02e1f3c0f",
+      "kind": "python"
+    },
+    {
+      "old": "v6_components.py",
+      "new": "legacy/v62/v6_components.py",
+      "sha256": "414347350d370e374b013c423cd68373f99a4338e7f262375d5e7c54b90b4d94",
+      "kind": "python"
+    },
+    {
+      "old": "voxel_common.py",
+      "new": "legacy/v62/voxel_common.py",
+      "sha256": "ea6b4c54a427179b2861ad0405cbbe0759acf3da63a16cf3dcccf59e88052b1b",
+      "kind": "python"
+    },
+    {
+      "old": "select_v6_candidate.py",
+      "new": "legacy/v62/select_v6_candidate.py",
+      "sha256": "a68ab5b70fff92693e863be6cb8ebd91c02c99ee35a579d7134f4f082faf7e02",
+      "kind": "python"
+    },
+    {
+      "old": "train_v6_stage1.py",
+      "new": "legacy/v62/train_v6_stage1.py",
+      "sha256": "36cc36c3a03e57a286b6f0a3843970559cc813394eae14a0d03cad1f0e8f896b",
+      "kind": "python"
+    },
+    {
+      "old": "time_v62_one_session_reconstruction.py",
+      "new": "legacy/v62/time_v62_one_session_reconstruction.py",
+      "sha256": "a86d108c7e236132e074d554b87056f92102676cbd8ac55fb51e2a408b132643",
+      "kind": "python"
+    },
+    {
+      "old": "v62_local.py",
+      "new": "legacy/v62/v62_local.py",
+      "sha256": "4e85fa199cffe45caa0135869f1136e10271e335fa5001d52f56a63ca682db29",
+      "kind": "python"
+    },
+    {
+      "old": "v4/select_v4_runtime_mode.py",
+      "new": "benchmarks/v4/select_v4_runtime_mode.py",
+      "sha256": "3117c5a95015f17ae93949ac3e3f43a37172ee2d99fed0a1d1f1191958451860",
+      "kind": "python"
+    },
+    {
+      "old": "v4/verify_v4_realtime_replay.py",
+      "new": "scripts/validation/verify_v4_realtime_replay.py",
+      "sha256": "92e92b1e9de7d5c81effc0221a41e74089d082788b1881199cab7559e816795f",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_stage_contracts.py",
+      "new": "tests/v4/smoke_test_v4_stage_contracts.py",
+      "sha256": "70d8f191607eafafddfac7500fee831a40a5cbb58dc9586ba3b2de3125681c7e",
+      "kind": "python"
+    },
+    {
+      "old": "v4/collect_v4_realtime_diagnostics.py",
+      "new": "scripts/validation/collect_v4_realtime_diagnostics.py",
+      "sha256": "0ad31479dfbbac2aaf3f97ef3f41289751e39652e9d3c3a609e5f631f7002d71",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_cli_error_paths.py",
+      "new": "tests/v4/smoke_test_v4_cli_error_paths.py",
+      "sha256": "a5acb7c0aace5fde1a5e9a56d02a11055fa5b3da557320f42238c6c764745b0a",
+      "kind": "python"
+    },
+    {
+      "old": "v4/profile_environment.py",
+      "new": "benchmarks/v4/profile_environment.py",
+      "sha256": "a67ec6fe2c8a37d00ae027f74b3baf5bc9d2949ab8bca46aeb292b46cee2ad4e",
+      "kind": "python"
+    },
+    {
+      "old": "v4/compare_v4_runtime_variants.py",
+      "new": "benchmarks/v4/compare_v4_runtime_variants.py",
+      "sha256": "55a874a348eff8bb07c4e59876c71dd74a95f7bec1f27fbed3c0efe3190e35e4",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_stage2_runtime.py",
+      "new": "tests/v4/smoke_test_v4_stage2_runtime.py",
+      "sha256": "55ac518e65f365968b58ae788437eb42f81130a95384a62bfad6a67522772733",
+      "kind": "python"
+    },
+    {
+      "old": "v4/validate_v4_production_source_contract.py",
+      "new": "scripts/validation/validate_v4_production_source_contract.py",
+      "sha256": "dea005285a36220237473257480e71ef1d3e19647f5f52af8303a8dd22c37cca",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_realtime.py",
+      "new": "tests/v4/smoke_test_v4_realtime.py",
+      "sha256": "abc120fbf4eb9eac3988594338fc4c6fe45f3c90720eebd1806c67237c0cb092",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_stage3_incremental.py",
+      "new": "tests/v4/smoke_test_v4_stage3_incremental.py",
+      "sha256": "1fafc3e78bb9118d297be3570f8f8d5c0e168b75e671bb3d07da56c3f8ad6213",
+      "kind": "python"
+    },
+    {
+      "old": "v4/summarize_v4_realtime_timing.py",
+      "new": "benchmarks/v4/summarize_v4_realtime_timing.py",
+      "sha256": "f36183a6f0f85f240810092b36cf8be978ed8cd7921d71e85a1baeaad693893d",
+      "kind": "python"
+    },
+    {
+      "old": "v4/select_v4_batch_size.py",
+      "new": "benchmarks/v4/select_v4_batch_size.py",
+      "sha256": "61166a6e8165c0f49df96a53b83f277c5ea4dc87e165af95113b635eb238e0dc",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_450ft_window.py",
+      "new": "tests/v4/smoke_test_v4_450ft_window.py",
+      "sha256": "453346bfc10fb74686558d98f188d9f75c978dda10711d0633d6e80c0251a379",
+      "kind": "python"
+    },
+    {
+      "old": "v4/validate_v4_runtime_gate.py",
+      "new": "scripts/validation/validate_v4_runtime_gate.py",
+      "sha256": "292bb41295140d10a537b396021a88a70a12ba0ecf9a424ffad035219d8feecb",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_replay_verifier_contract.py",
+      "new": "tests/v4/smoke_test_v4_replay_verifier_contract.py",
+      "sha256": "30185f0d6afe4fac354833916a4d42f4bc0a0ef8a9389d8ae79b83e2096d68c0",
+      "kind": "python"
+    },
+    {
+      "old": "v4/benchmark_v4_stage1_batch_sizes.py",
+      "new": "benchmarks/v4/benchmark_v4_stage1_batch_sizes.py",
+      "sha256": "b57b91df4038ee1af8fd1ee6981a6ddeb3e6f07312566d8b3fc16319423629da",
+      "kind": "python"
+    },
+    {
+      "old": "v4/smoke_test_v4_discovery_and_errors.py",
+      "new": "tests/v4/smoke_test_v4_discovery_and_errors.py",
+      "sha256": "c49d85f90ba28406331622a3d475fe78df4afa615bbfdde6aed4bd2718517a47",
+      "kind": "python"
+    },
+    {
+      "old": "ops/v4_full_dataset",
+      "new": "scripts/full_dataset",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage12_unity_native",
+      "new": "experiments/v4_stage12_unity_native",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage12_unity_sentis",
+      "new": "experiments/v4_stage12_unity_sentis",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage1_inference_opt1",
+      "new": "experiments/v4_stage1_inference_opt1",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage1_inference_opt2",
+      "new": "experiments/v4_stage1_inference_opt2",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage2_stage1_electrical_v10",
+      "new": "experiments/v4_stage2_stage1_electrical_v10",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "ops/v4_stage2_stage1_electrical_v10_opt",
+      "new": "experiments/v4_stage2_stage1_electrical_v10_opt",
+      "kind": "directory_alias"
+    },
+    {
+      "old": "download_v62_results_from_nebius.sh",
+      "new": "legacy/v62/download_v62_results_from_nebius.sh",
+      "kind": "shell",
+      "sha256": "cdc281369e728209d32009f810e40d96687fc2831d0e807023e4bec4f837bfe8"
+    },
+    {
+      "old": "check_v62_teacher_status.sh",
+      "new": "legacy/v62/check_v62_teacher_status.sh",
+      "kind": "shell",
+      "sha256": "f7d5310e51279f79ef9d8fcdaacabdfb15a6441df56c5dd87972d93234b44804"
+    },
+    {
+      "old": "run_v62_inference_on_nebius.sh",
+      "new": "legacy/v62/run_v62_inference_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "80364f3539ac732659ad0e01f72ee331711d59e92e2b26901e0149500af15600"
+    },
+    {
+      "old": "run_v62_teacher_inference.sh",
+      "new": "legacy/v62/run_v62_teacher_inference.sh",
+      "kind": "shell",
+      "sha256": "74cb0c8f62935a7f9e59f7f8c93438f1729e8cef80a3a563d50db269eab43280"
+    },
+    {
+      "old": "run_v62_teacher_reconstruction.sh",
+      "new": "legacy/v62/run_v62_teacher_reconstruction.sh",
+      "kind": "shell",
+      "sha256": "b638eb37eda06b2bb553a4d1dbc5bb6fe40d8b08bdb952e34bd4c09d15129256"
+    },
+    {
+      "old": "run_v62_teacher_training.sh",
+      "new": "legacy/v62/run_v62_teacher_training.sh",
+      "kind": "shell",
+      "sha256": "b43d3517fb05c5b144a43937f7886eecb865692df82016535eeba173301a4f53"
+    },
+    {
+      "old": "download_v62_teacher_results_to_mac.sh",
+      "new": "legacy/v62/download_v62_teacher_results_to_mac.sh",
+      "kind": "shell",
+      "sha256": "c9a602888907d05bbafd80919979d13de2fb50899617c86135ec1114545b0e89"
+    },
+    {
+      "old": "run_v62_stage3_on_nebius.sh",
+      "new": "legacy/v62/run_v62_stage3_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "8b12395f7bcea0e1b2733465d732314b11c418ae04b42a7dd4a355cf8721ed9a"
+    },
+    {
+      "old": "upload_v62_to_nebius_from_mac.sh",
+      "new": "legacy/v62/upload_v62_to_nebius_from_mac.sh",
+      "kind": "shell",
+      "sha256": "74cb898760b0355c91712011cf1744bbc675f8b6b3cf758ed3c82a50c39269d6"
+    },
+    {
+      "old": "run_v62_one_session_timing_all_on_nebius.sh",
+      "new": "legacy/v62/run_v62_one_session_timing_all_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "077c24457fc400a0e162d97d90893065311463757629d82f00be8b595e750873"
+    },
+    {
+      "old": "run_v62_teacher_training_on_nebius.sh",
+      "new": "legacy/v62/run_v62_teacher_training_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "efca16bf4d484c1fffcb2e48fd294bc95bc6b7b2e793dfb73e10c9730255bc3b"
+    },
+    {
+      "old": "inspect_v62_stage3_resume_state.sh",
+      "new": "legacy/v62/inspect_v62_stage3_resume_state.sh",
+      "kind": "shell",
+      "sha256": "d7e831a74e1508f1b961e2e286824238acf106da0b9269c4fa4f23cc67f868db"
+    },
+    {
+      "old": "check_v62_status.sh",
+      "new": "legacy/v62/check_v62_status.sh",
+      "kind": "shell",
+      "sha256": "3d55de3197128cca5f81d5d524ddd73ca524c222d9f09ab7de8ddf354ad201cd"
+    },
+    {
+      "old": "run_v62_one_session_inference_timed_on_nebius.sh",
+      "new": "legacy/v62/run_v62_one_session_inference_timed_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "ad364ff1abfb213a9609fd3e207960709c83529b2f63f16e5976981e38d9f07a"
+    },
+    {
+      "old": "run_v62_on_nebius.sh",
+      "new": "legacy/v62/run_v62_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "86994a9f2cd760902e6de90d3235148e9e7894ba19a0b4c11ab6cf2e9b989562"
+    },
+    {
+      "old": "run_v62_teacher_all.sh",
+      "new": "legacy/v62/run_v62_teacher_all.sh",
+      "kind": "shell",
+      "sha256": "49180bdb6c15abeebbfd5331d87fd63bf2bfc13a6aa725af6f9056272f643e17"
+    },
+    {
+      "old": "run_v62_stage3.sh",
+      "new": "legacy/v62/run_v62_stage3.sh",
+      "kind": "shell",
+      "sha256": "acf24a9d323ea9d3e78fe6fa88fc81eb0128e64b0c16722ef98fcf6e633f808e"
+    },
+    {
+      "old": "run_v62_teacher_all_on_nebius.sh",
+      "new": "legacy/v62/run_v62_teacher_all_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "dfac019a061fda34cf78d4d4b65afd82d087b61bc5fce9b1f2c00db348fc4f2d"
+    },
+    {
+      "old": "run_v62_teacher_inference_on_nebius.sh",
+      "new": "legacy/v62/run_v62_teacher_inference_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "630b29761ffca3d541c0c0c5eabbe04ff6695fcc2a9ed3fe167d029cf7e5e2cb"
+    },
+    {
+      "old": "run_v62_teacher_reconstruction_on_nebius.sh",
+      "new": "legacy/v62/run_v62_teacher_reconstruction_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "2f4aa82abdf7b591197e773daedacf06fa5dfdf0b15f1b774c84de74cb4a1c46"
+    },
+    {
+      "old": "run_v62_training.sh",
+      "new": "legacy/v62/run_v62_training.sh",
+      "kind": "shell",
+      "sha256": "9b875b092c4ccc08c98140f9bad273df49846f829cb37a6ded573da2e4530058"
+    },
+    {
+      "old": "run_v62_one_session_reconstruction_timed_on_nebius.sh",
+      "new": "legacy/v62/run_v62_one_session_reconstruction_timed_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "b0b8cb2719f9a712c2b2333b402c52fb30547d2d5d0e67f278f23475d2115d06"
+    },
+    {
+      "old": "run_v62_inference.sh",
+      "new": "legacy/v62/run_v62_inference.sh",
+      "kind": "shell",
+      "sha256": "257d0b55efc51f79c3ff6701f81beac18b90ee2e564b4dd884ad835905d185d7"
+    },
+    {
+      "old": "v4/show_v4_production_state_on_nebius.sh",
+      "new": "scripts/deploy/show_v4_production_state_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "c556d708c4831e59d42300bfcb9178b73d61a6f8abec37f277402bf9ccfbdbda"
+    },
+    {
+      "old": "v4/v4_nebius_common.sh",
+      "new": "scripts/deploy/v4_nebius_common.sh",
+      "kind": "shell",
+      "sha256": "6584b60dbe347d83411599976a389f13113579aa27923f079b6e54d9164e926c"
+    },
+    {
+      "old": "v4/run_v4_stage1_training.sh",
+      "new": "scripts/deploy/run_v4_stage1_training.sh",
+      "kind": "shell",
+      "sha256": "4f74cbca46c4939a294601b7ceecbf893a2998d5be4482897d2c46a6bc36d243"
+    },
+    {
+      "old": "v4/v4_code_validation_inside_docker.sh",
+      "new": "scripts/deploy/v4_code_validation_inside_docker.sh",
+      "kind": "shell",
+      "sha256": "b06431f5d4a26eb9ecdc8a1aeb84289154a39e6fbdc39751775e95ee14dbcaf1"
+    },
+    {
+      "old": "v4/download_v4_review_bundle_to_mac.sh",
+      "new": "scripts/deploy/download_v4_review_bundle_to_mac.sh",
+      "kind": "shell",
+      "sha256": "2e4658ecacf1ffb1c146fc7ad883fbd85d5303c4150b3b5b65605451b0a563bd"
+    },
+    {
+      "old": "v4/run_v4_stage2_training_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage2_training_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "da5f338be617bdc37d21885deca1956d4980ea4471c2e422be2ce4241ea45b2f"
+    },
+    {
+      "old": "v4/build_v4_realtime_image_on_nebius.sh",
+      "new": "scripts/deploy/build_v4_realtime_image_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "8a1a429cb08bad1d7b84db08f9f8de4b1f235e0876542d8a57db82a6e03df130"
+    },
+    {
+      "old": "v4/run_v4_stage1_batch_sweep_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage1_batch_sweep_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "d3d8afe7e2293b9f6d27d36818c9b8b04f492be0b87dcfca0770375e6dccc8a0"
+    },
+    {
+      "old": "v4/v4_preflight_inside_docker.sh",
+      "new": "scripts/deploy/v4_preflight_inside_docker.sh",
+      "kind": "shell",
+      "sha256": "c18726aeb4d337609e57407a3de3dfb7f79f189f8b5cc65e15c91557bbb2b8b3"
+    },
+    {
+      "old": "v4/resume_v4_acceptance_after_verifier_hotfix_on_nebius.sh",
+      "new": "scripts/deploy/resume_v4_acceptance_after_verifier_hotfix_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "86df733bdf3e82d98f89d7df88b85b34df2ad6801b14e3a10d0f70bbb64cdcd7"
+    },
+    {
+      "old": "v4/v4_production_acceptance_inside_docker.sh",
+      "new": "scripts/deploy/v4_production_acceptance_inside_docker.sh",
+      "kind": "shell",
+      "sha256": "db07a06c72211b8ff430dba2d016ff9d9d95ab360f41da20fdf428f2830a9174"
+    },
+    {
+      "old": "v4/package_v4_review_bundle_on_nebius.sh",
+      "new": "scripts/deploy/package_v4_review_bundle_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "59dbc8e72f663eeb1d60bedd6ee38413922cfba34bc0b3f24f2468b61549ee03"
+    },
+    {
+      "old": "v4/run_v4_realtime_session_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_realtime_session_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "f72aa22129785ebe1cf6d2331e42fa2b53874aeda0e0f4844d0cedbbbf9220b1"
+    },
+    {
+      "old": "v4/run_v4_stage2_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage2_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "4bb7676e2784bb3021555d5c191660f2cfd7cec585f6011d836435822cbd50cc"
+    },
+    {
+      "old": "v4/download_v4_realtime_results_to_mac.sh",
+      "new": "scripts/deploy/download_v4_realtime_results_to_mac.sh",
+      "kind": "shell",
+      "sha256": "3dbdc2886aab2abb67c89fb4ae749077e215774c9b9d276e6cd56f26ef92e900"
+    },
+    {
+      "old": "v4/v4_recovery_after_verifier_hotfix_inside_docker.sh",
+      "new": "scripts/deploy/v4_recovery_after_verifier_hotfix_inside_docker.sh",
+      "kind": "shell",
+      "sha256": "52025778cf10e67653634ee965dc7f587e5cd0986f9caafdf0adb005d65cfd1c"
+    },
+    {
+      "old": "v4/run_v4_runtime_variant_gate_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_runtime_variant_gate_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "75e3a80e0175a41973b64606a14064a3cad31fdcef7a1eddfe6d764fd64d4e5c"
+    },
+    {
+      "old": "v4/run_v4_stage3_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage3_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "15e1f7202c1a202aef1c884a08e57035ceb0e1ca533153c053b017acd35a8d6a"
+    },
+    {
+      "old": "v4/download_v4_production_results_to_mac.sh",
+      "new": "scripts/deploy/download_v4_production_results_to_mac.sh",
+      "kind": "shell",
+      "sha256": "3dbdc2886aab2abb67c89fb4ae749077e215774c9b9d276e6cd56f26ef92e900"
+    },
+    {
+      "old": "v4/run_v4_stage2_training.sh",
+      "new": "scripts/deploy/run_v4_stage2_training.sh",
+      "kind": "shell",
+      "sha256": "2ba17456b431cc4cc135c3273deb1495c3a6db2b4bbd3aa18389ab1c3d9deace"
+    },
+    {
+      "old": "v4/run_v4_realtime_benchmark_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_realtime_benchmark_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "36b28ac5a75af62cd0d179a178ec2a2148cea89f4ac5dafb3ae972e4354bb574"
+    },
+    {
+      "old": "v4/verify_v4_realtime_replay_on_nebius.sh",
+      "new": "scripts/deploy/verify_v4_realtime_replay_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "651bbe5504e47a380a0e00da74dbf253245a013d509f5da02764ee371a9c95f7"
+    },
+    {
+      "old": "v4/package_v4_production_state_on_nebius.sh",
+      "new": "scripts/deploy/package_v4_production_state_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "2bd3b3741a9fa2c1907634438fab6fa856529b31d970ca399d41ed24ec5f8fd0"
+    },
+    {
+      "old": "v4/run_v4_stage1_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage1_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "46ec24715c94f55cfe9dc112536f5162d43ba338eaed7f21635a124d30e5f663"
+    },
+    {
+      "old": "v4/run_v4_production_tests_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_production_tests_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "76ece1da51856b21c98068a0b9f82e30322e7c2c5e1fa3500196bb1131528e9d"
+    },
+    {
+      "old": "v4/run_v4_stage1_training_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_stage1_training_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "29e62a5e75928c43ca4691ab91266c55478003fffe6ede990819a195df9a59dd"
+    },
+    {
+      "old": "v4/run_v4_production_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_production_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "11d6b8f7c31406b3b369107fffc81c08ef8c6548f80134e9c6559c28b6cc6be4"
+    },
+    {
+      "old": "v4/v4_code_fingerprint.sh",
+      "new": "scripts/deploy/v4_code_fingerprint.sh",
+      "kind": "shell",
+      "sha256": "eb4686ca3c28e7a24cb4d914a467ee1acf89aed546f376e2614ba6bb31d67a3e"
+    },
+    {
+      "old": "v4/show_v4_build_state_on_nebius.sh",
+      "new": "scripts/deploy/show_v4_build_state_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "18029261bdff88e297adb5eeb7a91cb65ef7a69c8a025bea69cc6df960a8b4c4"
+    },
+    {
+      "old": "v4/package_v4_realtime_diagnostics_on_nebius.sh",
+      "new": "scripts/deploy/package_v4_realtime_diagnostics_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "1d7dd462ef01ba91747fd607fc9545efcdec9e089989cd8715c942f4840a9719"
+    },
+    {
+      "old": "v4/run_v4_realtime_preflight_on_nebius.sh",
+      "new": "scripts/deploy/run_v4_realtime_preflight_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "edd78e38ec73ec88f3a34fd10bffda7ebef620606226bcf568c422d0551f777d"
+    },
+    {
+      "old": "v4/package_v4_production_review_on_nebius.sh",
+      "new": "scripts/deploy/package_v4_production_review_on_nebius.sh",
+      "kind": "shell",
+      "sha256": "1d7dd462ef01ba91747fd607fc9545efcdec9e089989cd8715c942f4840a9719"
+    },
+    {
+      "old": "v4/smoke_test_v4_nebius_discovery.sh",
+      "new": "scripts/deploy/smoke_test_v4_nebius_discovery.sh",
+      "kind": "shell",
+      "sha256": "18b8400249ca16599ff89d5fe1ace317fbb1ddd3f337a128b10c7bfaf33feda0"
+    },
+    {
+      "old": "README_RUNTIME_HARDENING.md",
+      "new": "docs/archive/README_RUNTIME_HARDENING.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "CODEBASE_MANIFEST.md",
+      "new": "docs/archive/CODEBASE_MANIFEST.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "MAC_GITHUB_SETUP.md",
+      "new": "docs/archive/MAC_GITHUB_SETUP.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "README_SESSION_TIMING.md",
+      "new": "docs/archive/README_SESSION_TIMING.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "V10_FINAL_EXPERIMENTAL_RUNBOOK.md",
+      "new": "docs/archive/V10_FINAL_EXPERIMENTAL_RUNBOOK.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "FINAL_SOURCE_SHA256SUMS.txt",
+      "new": "docs/archive/FINAL_SOURCE_SHA256SUMS.txt",
+      "kind": "document_alias"
+    },
+    {
+      "old": "README_STAGE3_RESUME_PERFORMANCE.md",
+      "new": "docs/archive/README_STAGE3_RESUME_PERFORMANCE.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "README_TEACHER_RECALL_PIPELINE.md",
+      "new": "docs/archive/README_TEACHER_RECALL_PIPELINE.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "V4_V62_LINE_RECALL_ANALYSIS.md",
+      "new": "docs/archive/V4_V62_LINE_RECALL_ANALYSIS.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "BUILD_FIX_README.md",
+      "new": "docs/archive/BUILD_FIX_README.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "SHA256SUMS.txt",
+      "new": "docs/archive/SHA256SUMS.txt",
+      "kind": "document_alias"
+    },
+    {
+      "old": "README_CIRCUIT_COMPLETE_RECONSTRUCTION.md",
+      "new": "docs/archive/README_CIRCUIT_COMPLETE_RECONSTRUCTION.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/CODEBASE_MANIFEST.md",
+      "new": "docs/archive/v4/CODEBASE_MANIFEST.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/V4_REALTIME_PERFORMANCE_REVIEW.md",
+      "new": "docs/archive/v4/V4_REALTIME_PERFORMANCE_REVIEW.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/REPLAY_VERIFIER_HOTFIX_20260825.md",
+      "new": "docs/archive/v4/REPLAY_VERIFIER_HOTFIX_20260825.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/RELEASE_NOTES_V4_PRODUCTION_TEST.md",
+      "new": "docs/archive/v4/RELEASE_NOTES_V4_PRODUCTION_TEST.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/SHA256SUMS.txt",
+      "new": "docs/archive/v4/SHA256SUMS.txt",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/NEBIUS_V4_REALTIME_RUNBOOK.md",
+      "new": "docs/archive/v4/NEBIUS_V4_REALTIME_RUNBOOK.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/GITHUB_V4_REALTIME_INSTRUCTIONS.md",
+      "new": "docs/archive/v4/GITHUB_V4_REALTIME_INSTRUCTIONS.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/PRODUCTION_ACCEPTANCE_CHECKLIST.md",
+      "new": "docs/archive/v4/PRODUCTION_ACCEPTANCE_CHECKLIST.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/LOCAL_VALIDATION_REPORT.txt",
+      "new": "docs/archive/v4/LOCAL_VALIDATION_REPORT.txt",
+      "kind": "document_alias"
+    },
+    {
+      "old": "v4/README_STEP11_ACTIVE_CORE_CPU_COORD.md",
+      "new": "docs/archive/v4/README_STEP11_ACTIVE_CORE_CPU_COORD.md",
+      "kind": "document_alias"
+    },
+    {
+      "old": "ops/v4_stage2_stage1_electrical_v10_opt/v4_stage2_stage1_electrical_tracks_opt.py",
+      "new": "src/poleline/stage2/reconstruction.py",
+      "kind": "python",
+      "sha256": "2b04b55922461757aaeddf13115910c0fe51ae66c40e25b75d48874e1533dd1e"
+    }
+  ],
+  "container_mounts_updated": [
+    "experiments/v4_stage12_unity_sentis/build_v10_unity_export_on_nebius.sh",
+    "experiments/v4_stage1_inference_opt1/run_v4_stage1_nsight_profile.sh",
+    "experiments/v4_stage1_inference_opt1/run_v4_stage1_opt_experiment.sh",
+    "experiments/v4_stage1_inference_opt2/run_v4_stage1_opt2_experiment.sh",
+    "experiments/v4_stage1_inference_opt2/run_v4_stage1_opt2_nsight_profile.sh",
+    "experiments/v4_stage2_stage1_electrical_v10/run_v10_voxel_supported_fault_tolerant_stage2.sh",
+    "experiments/v4_stage2_stage1_electrical_v10/run_v4_stage2_stage1_electrical_v10_on_nebius.sh",
+    "experiments/v4_stage2_stage1_electrical_v10_opt/run_v10_stage2_opt_experiment.sh",
+    "scripts/deploy/run_v4_stage1_training_on_nebius.sh",
+    "scripts/deploy/run_v4_stage2_training_on_nebius.sh",
+    "scripts/deploy/v4_nebius_common.sh",
+    "scripts/full_dataset/preflight_v4_full_ops_on_nebius.sh",
+    "scripts/full_dataset/run_v4_all_data_mode_on_nebius.sh"
+  ]
+}

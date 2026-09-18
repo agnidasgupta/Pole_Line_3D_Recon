@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poleline-reconstruction"
+version = "4.0.0"
+description = "V4 voxel pole and line reconstruction"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["v4/requirements.txt"]}
+
+[project.scripts]
+poleline-stage1 = "poleline.cli.stage1:main"
+poleline-stage2 = "poleline.cli.stage2:main"
+poleline-stage3 = "poleline.cli.stage3:main"
+poleline-session = "poleline.cli.session:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "v4"]
