@@ -46,11 +46,14 @@ serialization unchanged. Candidate promotion requires exact comparison with
 the saved production outputs (`SCORE_ATOL=0`); this is an implementation guard,
 not evaluation against the incomplete ground-truth labels.
 
-E0 is the accepted control. E2, which removed detailed CUDA timing events, was
-rejected after a full-dataset attempt changed a production pole score. E3 keeps
-the E0 CUDA event sequence and tests only extending the lifetime of pinned
-gather-index buffers through the existing end-of-slice synchronization. See the
-experiment README for the E0 Nsight and E3 execution gates.
+E0 is the accepted control. E2 was rejected after removing detailed CUDA events
+changed a production pole score. E3 was exact on its representative session but
+its 0.23% unprofiled difference was noise and its profiled wall time was slightly
+slower, so it is also rejected. The next isolated candidate, E4, precomputes the
+same deterministic per-batch gather plans from E0's stable core schedule. It
+does not change model inputs, model execution, fusion, thresholds, predictions
+or serialization. See the experiment README for the E0 Nsight findings and E4
+execution gates.
 
 ## Repository layout
 

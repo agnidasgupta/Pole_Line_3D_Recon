@@ -74,6 +74,7 @@ def main():
             "pinned_d2h": info.get("pinned_d2h"),
             "detailed_cuda_timing": info.get("detailed_cuda_timing"),
             "retain_gather_host_buffers": info.get("retain_gather_host_buffers", "0"),
+            "precompute_batch_gather_plans": info.get("precompute_batch_gather_plans", "0"),
             "prune_embedding_head": info.get("prune_embedding_head"),
             "run_root": str(root),
         }

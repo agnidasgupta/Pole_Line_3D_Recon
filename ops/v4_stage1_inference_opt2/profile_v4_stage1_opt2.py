@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile accepted E0 or production-gated E3 without writing Stage1 artifacts."""
+"""Profile an accepted E0/E3/E4 run without writing Stage1 artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--iterations", type=int, default=5)
     parser.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
     parser.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
     args = parser.parse_args()
     if args.warmup < 0 or args.iterations < 1:
@@ -66,6 +67,7 @@ def main():
             workspace=workspace, pinned_d2h=False, require_compiled=False,
             detailed_cuda_timing=True,
             retain_gather_host_buffers=bool(args.retain_gather_host_buffers),
+            precompute_batch_gather_plans=bool(args.precompute_batch_gather_plans),
         )
 
     for _ in range(args.warmup):
@@ -75,7 +77,12 @@ def main():
     wall_ms = []
     component_rows = []
     torch.cuda.cudart().cudaProfilerStart()
-    variant = "e3_retain_gather_host_buffers" if args.retain_gather_host_buffers else "e0_control"
+    if args.precompute_batch_gather_plans:
+        variant = "e4_precomputed_batch_gather_plans"
+    elif args.retain_gather_host_buffers:
+        variant = "e3_retain_gather_host_buffers"
+    else:
+        variant = "e0_control"
     torch.cuda.nvtx.range_push(f"stage1_opt2_{variant}_profile")
     try:
         for index in range(args.iterations):
@@ -124,6 +131,7 @@ def main():
             "pinned_d2h": False,
             "detailed_cuda_timing": True,
             "retain_gather_host_buffers": bool(args.retain_gather_host_buffers),
+            "precompute_batch_gather_plans": bool(args.precompute_batch_gather_plans),
             "full_model_heads": True,
             "patch_size": int(cfg.get("patch_size", 64)),
             "core_size": 48,

@@ -16,9 +16,10 @@ PROFILE_VARIANT=${PROFILE_VARIANT:-e0}
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ "$PROFILE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "PROFILE_TIMEOUT_SECONDS must be an integer"
 case "$PROFILE_VARIANT" in
-  e0) RETAIN_GATHER_HOST_BUFFERS=0 ;;
-  e3) RETAIN_GATHER_HOST_BUFFERS=1 ;;
-  *) fail "PROFILE_VARIANT must be e0 or e3" ;;
+  e0) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0 ;;
+  e3) RETAIN_GATHER_HOST_BUFFERS=1; PRECOMPUTE_BATCH_GATHER_PLANS=0 ;;
+  e4) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=1 ;;
+  *) fail "PROFILE_VARIANT must be e0, e3, or e4" ;;
 esac
 for path in "$TOOL_DIR/profile_v4_stage1_opt2.py" "$TOOL_DIR/inventory_v4_stage1_model.py" "$HOST_INPUT" "$MODEL" "$CALIBRATION"; do
   [ -e "$path" ] || fail "missing required path: $path"
@@ -37,6 +38,15 @@ else
   if grep -q '^retain_gather_host_buffers=' "$RUN_ROOT/RUN_INFO.txt"; then
     grep -qx 'retain_gather_host_buffers=0' "$RUN_ROOT/RUN_INFO.txt" || \
       fail "E0 profile source run unexpectedly enabled E3"
+  fi
+fi
+if [ "$PROFILE_VARIANT" = e4 ]; then
+  grep -qx 'precompute_batch_gather_plans=1' "$RUN_ROOT/RUN_INFO.txt" || \
+    fail "E4 profile source run did not precompute batch gather plans"
+else
+  if grep -q '^precompute_batch_gather_plans=' "$RUN_ROOT/RUN_INFO.txt"; then
+    grep -qx 'precompute_batch_gather_plans=0' "$RUN_ROOT/RUN_INFO.txt" || \
+      fail "$PROFILE_VARIANT profile source unexpectedly enabled E4"
   fi
 fi
 
@@ -79,6 +89,7 @@ profile_args=(
   --calibration_json "/outputs${CALIBRATION#$HOST_OUTPUTS}"
   --output_json "$PROFILE_C/PROFILE_SUMMARY.json" --warmup 3 --iterations 5
   --retain_gather_host_buffers "$RETAIN_GATHER_HOST_BUFFERS"
+  --precompute_batch_gather_plans "$PRECOMPUTE_BATCH_GATHER_PLANS"
 )
 
 timeout --signal=TERM --kill-after=60 "$PROFILE_TIMEOUT_SECONDS" \

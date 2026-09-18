@@ -19,7 +19,7 @@ import torch
 import v4_realtime_core as reference
 
 
-OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e3-pinned-gather-lifetime-20260917"
+OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e4-precomputed-gather-plans-20260918"
 
 
 def active_core_groups_opt(
@@ -67,6 +67,81 @@ def active_core_groups_opt(
             }
         )
     return groups
+
+
+def active_core_schedule_with_batch_plans_opt(
+    coords: np.ndarray,
+    grid_size=(400, 400, 200),
+    core_size: int = 48,
+    batch_size: int = 12,
+):
+    """Build the accepted core schedule and identical gather plans in one pass.
+
+    Stable sorting by the accepted z/y/x linear core id makes every core a
+    contiguous span.  E4 derives each batch's destination rows and flattened
+    core offsets directly from those spans, avoiding the later per-batch Python
+    list construction and ``np.concatenate`` calls.  Row order and batch-slot
+    offsets are byte-for-byte equivalent to the E0 gather-plan construction.
+    """
+    c = np.asarray(coords, dtype=np.int32)
+    if not len(c):
+        return [], []
+    gx, gy, gz = map(int, grid_size)
+    csz = int(core_size)
+    bsz = int(batch_size)
+    if csz <= 0 or bsz <= 0:
+        raise ValueError("core_size and batch_size must be positive")
+    if np.any(c < 0) or np.any(c[:, 0] >= gx) or np.any(c[:, 1] >= gy) or np.any(c[:, 2] >= gz):
+        raise RuntimeError("active-core scheduling received an out-of-grid coordinate")
+
+    keys = c // csz
+    nx = int(math.ceil(gx / csz))
+    ny = int(math.ceil(gy / csz))
+    flat = ((keys[:, 2].astype(np.int64) * ny + keys[:, 1]) * nx + keys[:, 0])
+    order = np.argsort(flat, kind="stable").astype(np.int64, copy=False)
+    sorted_flat = flat[order]
+    starts = np.r_[0, np.flatnonzero(sorted_flat[1:] != sorted_flat[:-1]) + 1]
+    stops = np.r_[starts[1:], len(order)]
+
+    groups = []
+    for start, stop in zip(starts, stops):
+        rows = order[int(start):int(stop)]
+        key = keys[rows[0]].astype(np.int64, copy=False)
+        origin = key * csz
+        groups.append(
+            {
+                "key": tuple(map(int, key)),
+                "origin": origin,
+                "center": origin + csz // 2,
+                "rows": rows,
+            }
+        )
+
+    core_vol = csz ** 3
+    group_ids = np.repeat(
+        np.arange(len(groups), dtype=np.int64),
+        (stops - starts).astype(np.int64, copy=False),
+    )
+    sorted_keys = keys[order].astype(np.int64, copy=False)
+    local = c[order].astype(np.int64, copy=False) - sorted_keys * csz
+    flat_core_all = ((local[:, 2] * csz + local[:, 1]) * csz + local[:, 0])
+    take_all = flat_core_all + (group_ids % bsz) * core_vol
+
+    for group, start, stop in zip(groups, starts, stops):
+        group["_flat_core"] = flat_core_all[int(start):int(stop)]
+
+    plans = []
+    for group_start in range(0, len(groups), bsz):
+        group_stop = min(group_start + bsz, len(groups))
+        row_start = int(starts[group_start])
+        row_stop = int(stops[group_stop - 1])
+        plans.append(
+            (
+                take_all[row_start:row_stop].astype(np.int64, copy=False),
+                order[row_start:row_stop].astype(np.int64, copy=False),
+            )
+        )
+    return groups, plans
 
 
 def exact_padding(grid_size: Sequence[int], patch_size: int, core_size: int):
@@ -185,6 +260,7 @@ def _predict_active_gpu_opt(
     require_compiled: bool,
     detailed_cuda_timing: bool,
     retain_gather_host_buffers: bool,
+    precompute_batch_gather_plans: bool,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -198,8 +274,14 @@ def _predict_active_gpu_opt(
     use_dist = bool(int(cfg.get("use_dist", 1)))
 
     schedule_t0 = time.perf_counter()
-    groups = active_core_groups_opt(item["coords"], grid_size, core_size)
-    reference._prepare_group_gather(groups, item["coords"], core_size)
+    batch_gather_plans = None
+    if precompute_batch_gather_plans:
+        groups, batch_gather_plans = active_core_schedule_with_batch_plans_opt(
+            item["coords"], grid_size, core_size, batch_size
+        )
+    else:
+        groups = active_core_groups_opt(item["coords"], grid_size, core_size)
+        reference._prepare_group_gather(groups, item["coords"], core_size)
     schedule_ms = (time.perf_counter() - schedule_t0) * 1000.0
     n = len(item["coords"])
     timing = {
@@ -228,6 +310,7 @@ def _predict_active_gpu_opt(
         "pinned_d2h": int(bool(pinned_d2h)),
         "detailed_cuda_timing": int(bool(detailed_cuda_timing)),
         "retain_gather_host_buffers": int(bool(retain_gather_host_buffers)),
+        "precompute_batch_gather_plans": int(bool(precompute_batch_gather_plans)),
         "fixed_batch_shape": int(bool(fixed_batch_shape)),
         "batches": 0,
     }
@@ -303,7 +386,7 @@ def _predict_active_gpu_opt(
     # remain unchanged.
     gather_host_refs = []
 
-    for start in range(0, len(groups), int(batch_size)):
+    for batch_index, start in enumerate(range(0, len(groups), int(batch_size))):
         bg = groups[start:start + int(batch_size)]
         real_count = len(bg)
         if not real_count:
@@ -354,20 +437,23 @@ def _predict_active_gpu_opt(
         model_events.append(me)
 
         gather_plan_t0 = time.perf_counter()
-        offsets = []
-        dest_rows = []
-        for bi, group in enumerate(bg):
-            rr = np.asarray(group["rows"], dtype=np.int64)
-            if len(rr):
-                offsets.append(group["_flat_core"] + bi * core_vol)
-                dest_rows.append(rr)
+        if batch_gather_plans is not None:
+            take_np, dest_np = batch_gather_plans[batch_index]
+        else:
+            offsets = []
+            dest_rows = []
+            for bi, group in enumerate(bg):
+                rr = np.asarray(group["rows"], dtype=np.int64)
+                if len(rr):
+                    offsets.append(group["_flat_core"] + bi * core_vol)
+                    dest_rows.append(rr)
+            take_np = np.concatenate(offsets).astype(np.int64, copy=False)
+            dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
         timing["gpu_gather_plan_ms"] += (time.perf_counter() - gather_plan_t0) * 1000.0
 
         ge = _event_pair(detailed_cuda_timing)
         ge[0].record()
-        if offsets:
-            take_np = np.concatenate(offsets).astype(np.int64, copy=False)
-            dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
+        if len(take_np):
             take_host, take_pinned = reference._pin_numpy_tensor(take_np, torch.int64)
             dest_host, dest_pinned = reference._pin_numpy_tensor(dest_np, torch.int64)
             if retain_gather_host_buffers:
@@ -443,6 +529,7 @@ def predict_v4_sparse_rows_opt(
     require_compiled: bool = False,
     detailed_cuda_timing: bool = True,
     retain_gather_host_buffers: bool = False,
+    precompute_batch_gather_plans: bool = False,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -461,5 +548,5 @@ def predict_v4_sparse_rows_opt(
         item, model, cfg, calibration, grid_size, int(core_size), int(batch_size), amp,
         bool(channels_last), bool(fixed_batch_shape), workspace,
         bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
-        bool(retain_gather_host_buffers),
+        bool(retain_gather_host_buffers), bool(precompute_batch_gather_plans),
     )

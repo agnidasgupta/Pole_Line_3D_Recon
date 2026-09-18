@@ -24,6 +24,7 @@ CHANNELS_LAST=${CHANNELS_LAST:-1}
 PINNED_D2H=${PINNED_D2H:-0}
 DETAILED_CUDA_TIMING=${DETAILED_CUDA_TIMING:-1}
 RETAIN_GATHER_HOST_BUFFERS=${RETAIN_GATHER_HOST_BUFFERS:-0}
+PRECOMPUTE_BATCH_GATHER_PLANS=${PRECOMPUTE_BATCH_GATHER_PLANS:-0}
 PRUNE_EMBEDDING_HEAD=${PRUNE_EMBEDDING_HEAD:-0}
 WARMUP_ITERATIONS=${WARMUP_ITERATIONS:-0}
 RUN_ID="${RUN_STAMP}_${VARIANT_NAME}"
@@ -58,6 +59,10 @@ group_id() {
 [[ "$PINNED_D2H" =~ ^[01]$ ]] || fail "PINNED_D2H must be 0 or 1"
 [[ "$DETAILED_CUDA_TIMING" = 1 ]] || fail "accepted E0/E3 experiments require DETAILED_CUDA_TIMING=1"
 [[ "$RETAIN_GATHER_HOST_BUFFERS" =~ ^[01]$ ]] || fail "RETAIN_GATHER_HOST_BUFFERS must be 0 or 1"
+[[ "$PRECOMPUTE_BATCH_GATHER_PLANS" =~ ^[01]$ ]] || fail "PRECOMPUTE_BATCH_GATHER_PLANS must be 0 or 1"
+if [ "$PRECOMPUTE_BATCH_GATHER_PLANS" = 1 ] && [ "$RETAIN_GATHER_HOST_BUFFERS" != 0 ]; then
+  fail "E4 isolates precomputed gather plans and requires RETAIN_GATHER_HOST_BUFFERS=0"
+fi
 [[ "$PRUNE_EMBEDDING_HEAD" = 0 ]] || fail "production-preserving experiments require PRUNE_EMBEDDING_HEAD=0"
 [[ "$WARMUP_ITERATIONS" = 0 ]] || fail "production-preserving experiments require WARMUP_ITERATIONS=0"
 [[ "$BATCH_SIZE" = 12 ]] || fail "production-preserving experiments require BATCH_SIZE=12"
@@ -116,6 +121,7 @@ echo "compile_model=$COMPILE_MODEL compile_mode=$COMPILE_MODE channels_last=$CHA
 echo "pinned_d2h=$PINNED_D2H prune_embedding_head=$PRUNE_EMBEDDING_HEAD warmup_iterations=$WARMUP_ITERATIONS"
 echo "detailed_cuda_timing=$DETAILED_CUDA_TIMING"
 echo "retain_gather_host_buffers=$RETAIN_GATHER_HOST_BUFFERS"
+echo "precompute_batch_gather_plans=$PRECOMPUTE_BATCH_GATHER_PLANS"
 echo "only_group_id=${ONLY_GROUP_ID:-ALL} expected_sessions=$EXPECTED_SESSIONS"
 echo "score_atol=$SCORE_ATOL"
 
@@ -164,6 +170,7 @@ channels_last=$CHANNELS_LAST
 pinned_d2h=$PINNED_D2H
 detailed_cuda_timing=$DETAILED_CUDA_TIMING
 retain_gather_host_buffers=$RETAIN_GATHER_HOST_BUFFERS
+precompute_batch_gather_plans=$PRECOMPUTE_BATCH_GATHER_PLANS
 prune_embedding_head=$PRUNE_EMBEDDING_HEAD
 warmup_iterations=$WARMUP_ITERATIONS
 only_group_id=$ONLY_GROUP_ID
@@ -226,6 +233,7 @@ for manifest in "${MANIFESTS[@]}"; do
       --channels_last "$CHANNELS_LAST" --pinned_d2h "$PINNED_D2H" \
       --detailed_cuda_timing "$DETAILED_CUDA_TIMING" \
       --retain_gather_host_buffers "$RETAIN_GATHER_HOST_BUFFERS" \
+      --precompute_batch_gather_plans "$PRECOMPUTE_BATCH_GATHER_PLANS" \
       --prune_embedding_head "$PRUNE_EMBEDDING_HEAD" --warmup_iterations "$WARMUP_ITERATIONS" \
       --evaluate_all_cores 0 --gpu_coord_channels 1 \
       --fixed_batch_shape 1 --resume "$RESUME" --max_slices 0 \

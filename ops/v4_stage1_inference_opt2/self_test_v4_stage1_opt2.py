@@ -9,6 +9,7 @@ import v4_realtime_core as reference
 from v4_realtime_core_opt2 import (
     V4SparseGpuWorkspace,
     active_core_groups_opt,
+    active_core_schedule_with_batch_plans_opt,
     exact_padding,
     predict_v4_sparse_rows_opt,
 )
@@ -23,6 +24,28 @@ def assert_groups_equal(coords, grid, core):
         assert np.array_equal(a["origin"], b["origin"])
         assert np.array_equal(a["center"], b["center"])
         assert np.array_equal(a["rows"], b["rows"])
+
+
+def assert_e4_plans_equal(coords, grid, core, batch_size=12):
+    expected = reference.active_core_groups(coords, grid, core)
+    reference._prepare_group_gather(expected, coords, core)
+    actual, plans = active_core_schedule_with_batch_plans_opt(
+        coords, grid, core, batch_size
+    )
+    assert len(expected) == len(actual)
+    assert len(plans) == (len(expected) + batch_size - 1) // batch_size
+    core_vol = int(core) ** 3
+    for batch_index, start in enumerate(range(0, len(expected), batch_size)):
+        batch = expected[start:start + batch_size]
+        expected_take = np.concatenate(
+            [group["_flat_core"] + index * core_vol for index, group in enumerate(batch)]
+        ).astype(np.int64, copy=False)
+        expected_dest = np.concatenate(
+            [np.asarray(group["rows"], dtype=np.int64) for group in batch]
+        ).astype(np.int64, copy=False)
+        actual_take, actual_dest = plans[batch_index]
+        assert np.array_equal(expected_take, actual_take)
+        assert np.array_equal(expected_dest, actual_dest)
 
 
 class DummyModel(torch.nn.Module):
@@ -63,6 +86,7 @@ def main():
             [rng.integers(0, grid[axis], size=count) for axis in range(3)]
         ).astype(np.int32)
         assert_groups_equal(coords, grid, 48)
+        assert_e4_plans_equal(coords, grid, 48)
 
     low, high = exact_padding((400, 400, 200), 64, 48)
     assert tuple(low) == (8, 8, 8), (low, high)
@@ -79,6 +103,7 @@ def main():
     }
     workspace = V4SparseGpuWorkspace()
     e3_workspace = V4SparseGpuWorkspace()
+    e4_workspace = V4SparseGpuWorkspace()
     boundary = np.asarray(
         [[0, 0, 0], [96, 82, 64], [48, 48, 48], [80, 60, 20], [7, 75, 63]],
         dtype=np.int32,
@@ -115,6 +140,19 @@ def main():
             assert delta == 0.0, (seed, "e3", name, delta)
         assert np.array_equal(expected["semantic"], e3["semantic"])
         assert e3["timing"]["retain_gather_host_buffers"] == 1
+        e4 = predict_v4_sparse_rows_opt(
+            item, model, cfg, calibration, grid_size=grid, core_size=48,
+            batch_size=12, amp="bf16", evaluate_all_cores=False,
+            gpu_coord_channels=True, fixed_batch_shape=True,
+            workspace=e4_workspace, pinned_d2h=False,
+            detailed_cuda_timing=True, retain_gather_host_buffers=False,
+            precompute_batch_gather_plans=True,
+        )
+        for name in ("pole", "line", "objectness"):
+            delta = float(np.max(np.abs(expected[name] - e4[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e4", name, delta)
+        assert np.array_equal(expected["semantic"], e4["semantic"])
+        assert e4["timing"]["precompute_batch_gather_plans"] == 1
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")
