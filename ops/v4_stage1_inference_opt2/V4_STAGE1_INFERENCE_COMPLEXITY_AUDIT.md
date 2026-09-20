@@ -48,7 +48,7 @@ every checkpoint head.
 
 ## Contract-safe experiment candidates
 
-### E5: cached coordinates and reusable model input — selected
+### E5: cached coordinates and reusable model input — rejected
 
 The x/y/z coordinate values are deterministic functions of the fixed grid,
 patch size and core center. E5 caches the exact FP32 one-dimensional coordinate
@@ -57,8 +57,23 @@ channels-last input tensor. This removes repeated coordinate arithmetic,
 `torch.cat`, and the subsequent channels-last materialization while keeping the
 model input values and layout identical.
 
-E5 is opt-in and E0 remains the default. The CUDA self-test first requires
-`torch.equal` for the complete input tensor and then exact output equality.
+E5 passed representative exact-output tests and reduced the two-run Stage 1
+mean by 1.39%. Its full-data gate stopped after 14 accepted sessions when a
+pole score changed by `0.00019707530736923218`. A fresh E0 run reproduced the
+complete failing session exactly. E5 therefore changed execution behavior and
+is rejected; its full-data run must not be resumed.
+
+### E5b: production-assembled reference coordinate cache — selected
+
+E5b removes E5's reusable final model-input buffer. Coordinate values are
+generated on cache misses by the exact production batched FP32 expression, but
+production `torch.cat`, channels-last conversion and new final-input allocation
+remain in place for every batch. Only immutable one-dimensional coordinate
+values are cached.
+
+Its CUDA self-test compares complete E0/E5b inputs with `torch.equal` for all
+405 possible active-core centers and every partial fixed-batch padding count.
+The first saved-production gate is the 157-slice session that rejected E5.
 
 ### Reuse the objectness sigmoid — suitable later
 
@@ -66,7 +81,7 @@ E5 is opt-in and E0 remains the default. The CUDA self-test first requires
 `_run_model_scores()` computes the same sigmoid again for the saved objectness
 output. Returning and reusing the first tensor should remove one dense sigmoid
 without changing its value. This is likely exact and low risk, but it should be
-an isolated experiment after E5.
+an isolated experiment only after E5b is accepted or rejected.
 
 ### Evaluate all heads only on the consumed 48-cube core — conditional
 

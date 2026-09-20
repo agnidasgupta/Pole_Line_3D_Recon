@@ -49,11 +49,14 @@ not evaluation against the incomplete ground-truth labels.
 E0 is the accepted control. E2 was rejected after removing detailed CUDA events
 changed a production pole score. E3 produced no repeatable benefit. E4 remained
 exact in two representative runs but saved only 0.37% on average and was rejected
-as operationally insignificant. E5 tests an exact coordinate-channel cache and
-reusable channels-last input buffer while leaving the complete model, heads and
-output decisions unchanged. See the experiment README and inference-complexity
-audit for its gates and for model/training changes that are outside the V4
-production contract.
+as operationally insignificant. E5's coordinate/input cache was rejected after
+its full gate changed a production pole score, despite passing representative
+runs. E5b is the narrower follow-up: it caches only coordinate values produced by
+the production batch expression while retaining production `torch.cat`,
+channels-last materialization, and a newly allocated final model input. Its first
+gate is the 157-slice session that rejected E5. See the experiment README and
+inference-complexity audit for its gates and for model/training changes outside
+the V4 production contract.
 
 ## Repository layout
 

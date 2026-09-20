@@ -45,8 +45,9 @@ TIMING_COLUMNS = [
     "batch_size", "channels_last", "compile_model", "compile_mode",
     "prune_embedding_head", "detailed_cuda_timing", "optimization_version",
     "retain_gather_host_buffers", "precompute_batch_gather_plans",
-    "cache_coordinate_channels", "coordinate_cache_hits",
-    "coordinate_cache_misses", "model_input_reused",
+    "cache_coordinate_channels", "cache_reference_coordinate_channels",
+    "coordinate_cache_hits", "coordinate_cache_misses",
+    "reference_coordinate_batch_cache_hit", "model_input_reused",
 ]
 
 
@@ -75,6 +76,7 @@ def parse_args():
     p.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
     p.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
     p.add_argument("--cache_coordinate_channels", type=int, choices=[0, 1], default=0)
+    p.add_argument("--cache_reference_coordinate_channels", type=int, choices=[0, 1], default=0)
     p.add_argument("--prune_embedding_head", type=int, choices=[0], default=0)
     p.add_argument("--warmup_iterations", type=int, choices=[0], default=0)
     p.add_argument("--evaluate_all_cores", type=int, choices=[0], default=0)
@@ -83,6 +85,8 @@ def parse_args():
     p.add_argument("--resume", type=int, choices=[0, 1], default=1)
     p.add_argument("--max_slices", type=int, default=0)
     a = p.parse_args()
+    if a.cache_coordinate_channels and a.cache_reference_coordinate_channels:
+        p.error("E5 and E5b coordinate caches are mutually exclusive")
     return a
 
 
@@ -157,6 +161,7 @@ def main():
         f"retain_gather_host_buffers={a.retain_gather_host_buffers} "
         f"precompute_batch_gather_plans={a.precompute_batch_gather_plans} "
         f"cache_coordinate_channels={a.cache_coordinate_channels} "
+        f"cache_reference_coordinate_channels={a.cache_reference_coordinate_channels} "
         f"prune_embedding={a.prune_embedding_head} warmup_ms={warmup_ms:.1f}",
         flush=True,
     )
@@ -224,6 +229,7 @@ def main():
             retain_gather_host_buffers=bool(a.retain_gather_host_buffers),
             precompute_batch_gather_plans=bool(a.precompute_batch_gather_plans),
             cache_coordinate_channels=bool(a.cache_coordinate_channels),
+            cache_reference_coordinate_channels=bool(a.cache_reference_coordinate_channels),
         )
         infer_ms = (time.perf_counter() - t0) * 1000.0
         center = extract_center_metadata(frame)
@@ -256,6 +262,7 @@ def main():
             "retain_gather_host_buffers": bool(a.retain_gather_host_buffers),
             "precompute_batch_gather_plans": bool(a.precompute_batch_gather_plans),
             "cache_coordinate_channels": bool(a.cache_coordinate_channels),
+            "cache_reference_coordinate_channels": bool(a.cache_reference_coordinate_channels),
             "prune_embedding_head": bool(a.prune_embedding_head),
             "warmup_iterations": int(a.warmup_iterations),
             "model_warmup_ms": float(warmup_ms),
@@ -293,6 +300,7 @@ def main():
             "retain_gather_host_buffers": int(a.retain_gather_host_buffers),
             "precompute_batch_gather_plans": int(a.precompute_batch_gather_plans),
             "cache_coordinate_channels": int(a.cache_coordinate_channels),
+            "cache_reference_coordinate_channels": int(a.cache_reference_coordinate_channels),
             "stage1_artifact_write_ms": artifact_write_ms,
             "stage1_manifest_write_ms": manifest_write_ms,
             "slice_total_ms": (time.perf_counter() - slice_t0) * 1000.0,

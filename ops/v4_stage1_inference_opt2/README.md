@@ -33,30 +33,44 @@ baseline_comparable_total:  379.022 -> 209.723 ms (44.67%, 1.807x)
 | E2 remove detailed CUDA events | Production score drift | Rejected |
 | E3 retain gather host buffers | Exact, no repeatable benefit | Rejected |
 | E4 precomputed gather plans | Exact twice; mean 0.37% faster | Rejected as operationally insignificant |
-| E5 coordinate/input cache | Pending | Current isolated experiment |
+| E5 coordinate/input cache | Representative exact; full gate drifted after 14 sessions | Rejected |
+| E5b reference coordinate cache | Pending | Current isolated experiment |
 
-E4's two-run mean was 121.745 ms for E0 and 121.300 ms for E4, saving
-only 0.445 ms per slice. It must not be promoted, profiled or run over all 30
-sessions.
+E5 reduced the two-run representative mean from 121.648 to 119.954 ms, but its
+30-session gate failed on session 15. One production pole score changed by
+`0.00019707530736923218`. A fresh E0 run reproduced that complete 157-slice
+session exactly, proving the failure belongs to E5 rather than the environment.
+E5 must not be resumed or promoted.
 
-## Why E5
+## Why E5b
 
 The accepted E0 profile measured approximately 5.175 ms of feature assembly per
 profiled slice. Every batch recalculates deterministic x/y/z coordinate channels,
 concatenates them with occupancy and distance, and then materializes a
 channels-last tensor.
 
-E5 caches the exact FP32 coordinate vectors and writes the unchanged five input
-channels directly into a reusable channels-last buffer. It preserves:
+E5 changed coordinate generation and final input materialization together. E5b
+keeps only the safe, narrower part of that idea. On a cache miss it creates FP32
+coordinate lines with the exact production batch expression. It then retains
+only those immutable one-dimensional values. Every batch still uses production's
+`torch.cat` followed by production's channels-last conversion, and the final
+model input is newly allocated rather than reused.
+
+E5b preserves:
 
 - every coordinate value and channel position;
 - occupancy and normalized-distance values;
-- batch padding and active-core order;
+- production batch padding, `torch.cat`, channels-last conversion and active-core order;
 - the complete model forward and all five heads;
 - BF16 autocast, score fusion and output decisions.
 
-E0 remains the default. E5 is enabled only by
-`CACHE_COORDINATE_CHANNELS=1`. E4 and E3 remain disabled during E5.
+The CUDA self-test checks exact E0/E5b input equality for all 405 possible
+active-core centers in the 400x400x200 grid and every partial fixed-batch padding
+count. It also checks exact model outputs. This self-test is necessary but does
+not replace saved-production session gates.
+
+E0 remains the default. E5b is enabled only by
+`CACHE_REFERENCE_COORDINATE_CHANNELS=1`. E3, E4 and E5 must all remain disabled.
 
 See [`V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md`](V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md)
 for model-level and future training-level findings.
@@ -65,11 +79,11 @@ for model-level and future training-level findings.
 
 ```bash
 cd /Users/agni/Downloads
-shasum -a 256 -c V4_Stage1_Opt2_E5_Coordinate_Input_Cache_v7.zip.sha256
+shasum -a 256 -c V4_Stage1_Opt2_E5b_Reference_Coordinate_Cache_v8.zip.sha256
 
 REPO=/Users/agni/dev/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
 BRANCH=v4-stage1-inference-opt2
-ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E5_Coordinate_Input_Cache_v7.zip
+ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E5b_Reference_Coordinate_Cache_v8.zip
 
 git -C "$REPO" status --short
 git -C "$REPO" fetch origin "$BRANCH"
@@ -89,7 +103,7 @@ Review and push:
 git -C "$REPO" add README.md ops/v4_stage1_inference_opt2
 git -C "$REPO" diff --cached --check
 git -C "$REPO" diff --cached --name-only
-git -C "$REPO" commit -m "Add production-gated Stage1 E5 coordinate cache"
+git -C "$REPO" commit -m "Add production-gated Stage1 E5b coordinate cache"
 git -C "$REPO" push origin "$BRANCH"
 ```
 
@@ -110,21 +124,22 @@ chmod +x "$OPS"/*.sh
 
 Stop if the worktree is dirty or the update is not a fast-forward.
 
-## Run the representative E5 gate
+## Gate 1: run E5b on the session that rejected E5
 
 Python runs only inside Docker through this launcher:
 
 ```bash
-ONLY_GROUP_ID='VELASCO_CUT_CP/session1' \
+ONLY_GROUP_ID='NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2' \
 EXPECTED_SESSIONS=1 \
-VARIANT_NAME=e5_coordinate_input_cache \
+VARIANT_NAME=e5b_reference_coordinate_cache_session2 \
 IMAGE=va-v4-realtime:torch241-cu121 \
 COMPILE_MODEL=0 COMPILE_MODE=default \
 BATCH_SIZE=12 CHANNELS_LAST=1 PINNED_D2H=0 \
 PRUNE_EMBEDDING_HEAD=0 WARMUP_ITERATIONS=0 \
 DETAILED_CUDA_TIMING=1 RETAIN_GATHER_HOST_BUFFERS=0 \
 PRECOMPUTE_BATCH_GATHER_PLANS=0 \
-CACHE_COORDINATE_CHANNELS=1 \
+CACHE_COORDINATE_CHANNELS=0 \
+CACHE_REFERENCE_COORDINATE_CHANNELS=1 \
 SCORE_ATOL=0 RESUME=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
 ```
@@ -146,12 +161,12 @@ V4_STAGE1_OPT2_ALL_SESSIONS_PRODUCTION_EQUIVALENT_AND_OK
 Save and inspect the run:
 
 ```bash
-E5_ROOT=$(cat /home/agni/LATEST_V4_STAGE1_OPT2_RUN.txt)
-printf '%s\n' "$E5_ROOT" > /home/agni/V4_STAGE1_OPT2_E5_ROOT.txt
+E5B_ROOT=$(cat /home/agni/LATEST_V4_STAGE1_OPT2_RUN.txt)
+printf '%s\n' "$E5B_ROOT" > /home/agni/V4_STAGE1_OPT2_E5B_SESSION2_ROOT.txt
 
 grep -E \
-  'variant_name=|detailed_cuda_timing=|retain_gather_host_buffers=|precompute_batch_gather_plans=|cache_coordinate_channels=' \
-  "$E5_ROOT/RUN_INFO.txt"
+  'variant_name=|detailed_cuda_timing=|retain_gather_host_buffers=|precompute_batch_gather_plans=|cache_coordinate_channels=|cache_reference_coordinate_channels=' \
+  "$E5B_ROOT/RUN_INFO.txt"
 ```
 
 Expected:
@@ -160,26 +175,30 @@ Expected:
 detailed_cuda_timing=1
 retain_gather_host_buffers=0
 precompute_batch_gather_plans=0
-cache_coordinate_channels=1
+cache_coordinate_channels=0
+cache_reference_coordinate_channels=1
 ```
 
-## Compare E5 with E0
+Any score or saved-output difference rejects E5b immediately. Do not change
+`SCORE_ATOL` and do not resume the rejected E5 full-data root.
+
+## Compare E5b with the exact E0 session control
 
 ```bash
 HOST_OUTPUTS=/workspace/voxel_poleline/outputs
-E0_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E0_PROFILE_SOURCE_ROOT.txt)
-E5_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E5_ROOT.txt)
+E0_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E0_SESSION2_CONTROL_ROOT.txt)
+E5B_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E5B_SESSION2_ROOT.txt)
 E0_C="/outputs${E0_ROOT#$HOST_OUTPUTS}"
-E5_C="/outputs${E5_ROOT#$HOST_OUTPUTS}"
+E5B_C="/outputs${E5B_ROOT#$HOST_OUTPUTS}"
 
 docker run --rm \
   --mount "type=bind,source=$OPS,target=/workspace/opt,readonly" \
   --mount "type=bind,source=$HOST_OUTPUTS,target=/outputs" \
   va-v4-realtime:torch241-cu121 \
   python /workspace/opt/rank_v4_stage1_opt2_variants.py \
-    "$E0_C" "$E5_C" \
-    --group-id 'VELASCO_CUT_CP/session1' \
-    --output /outputs/v4_stage1_opt2_e0_e5_ranking.csv
+    "$E0_C" "$E5B_C" \
+    --group-id 'NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2' \
+    --output /outputs/v4_stage1_opt2_e0_e5b_session2_ranking.csv
 ```
 
 Also compare the targeted timing:
@@ -189,64 +208,66 @@ echo '===== E0 ====='
 grep -E '^(gpu_feature_assembly_ms|stage1_wall_ms|baseline_comparable_total_ms)' \
   "$E0_ROOT/STAGE1_TIMING_SESSION_AVERAGES.txt"
 
-echo '===== E5 ====='
+echo '===== E5B ====='
 grep -E '^(gpu_feature_assembly_ms|stage1_wall_ms|baseline_comparable_total_ms)' \
-  "$E5_ROOT/STAGE1_TIMING_SESSION_AVERAGES.txt"
+  "$E5B_ROOT/STAGE1_TIMING_SESSION_AVERAGES.txt"
 ```
 
-Any saved-production mismatch rejects E5 immediately. If E5 passes but improves
-Stage 1 wall time by less than 1%, repeat one fresh E0/E5 pair. Reject an
-inconsistent or sub-1% result as noise.
+If E5b is exact but improves Stage 1 wall time by less than 1%, reject it as
+operationally insignificant. If it saves at least 1%, repeat a fresh matched
+E0/E5b pair before profiling or running all 30 sessions.
 
-## Profile an accepted E5 representative run
+## Profile only a confirmed E5b candidate
 
 Profile only after exact equivalence and a repeatable timing improvement:
 
 ```bash
-E5_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E5_ROOT.txt)
+E5B_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E5B_SESSION2_ROOT.txt)
 PROFILE_IMAGE=va-v4-realtime:torch241-cu121-nsight
 PROFILE_STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-PROFILE_LOG="/home/agni/V4_STAGE1_OPT2_E5_NSYS_${PROFILE_STAMP}.log"
+PROFILE_LOG="/home/agni/V4_STAGE1_OPT2_E5B_NSYS_${PROFILE_STAMP}.log"
 
 nohup env \
-  PROFILE_VARIANT=e5 \
+  PROFILE_VARIANT=e5b \
   IMAGE="$PROFILE_IMAGE" \
-  RUN_ROOT="$E5_ROOT" \
-  SESSION_FILTER='VELASCO_CUT_CP/session1' \
+  RUN_ROOT="$E5B_ROOT" \
+  SESSION_FILTER='NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2' \
   PROFILE_TIMEOUT_SECONDS=1800 \
   bash "$OPS/run_v4_stage1_opt2_nsight_profile.sh" \
   > "$PROFILE_LOG" 2>&1 < /dev/null &
 
 PROFILE_PID=$!
-printf '%s\n' "$PROFILE_PID" > /home/agni/LATEST_V4_STAGE1_OPT2_E5_PROFILE_PID.txt
-printf '%s\n' "$PROFILE_LOG" > /home/agni/LATEST_V4_STAGE1_OPT2_E5_PROFILE_LOG.txt
+printf '%s\n' "$PROFILE_PID" > /home/agni/LATEST_V4_STAGE1_OPT2_E5B_PROFILE_PID.txt
+printf '%s\n' "$PROFILE_LOG" > /home/agni/LATEST_V4_STAGE1_OPT2_E5B_PROFILE_LOG.txt
 ```
 
 Success requires `NSIGHT_PROFILE_OK` and a nonempty pointer at:
 
 ```text
-/home/agni/LATEST_V4_STAGE1_OPT2_E5_PROFILE_ARCHIVE.txt
+/home/agni/LATEST_V4_STAGE1_OPT2_E5B_PROFILE_ARCHIVE.txt
 ```
 
 ## Full 30-session gate
 
-Run only after repeatable representative timing and Nsight support E5:
+Run only after exact failing-session reproduction, at least 1% repeatable timing
+benefit, and a successful E5b profile:
 
 ```bash
 unset ONLY_GROUP_ID
 
 EXPECTED_SESSIONS=30 \
-VARIANT_NAME=e5_coordinate_input_cache_full30 \
+VARIANT_NAME=e5b_reference_coordinate_cache_full30 \
 IMAGE=va-v4-realtime:torch241-cu121 \
 COMPILE_MODEL=0 COMPILE_MODE=default \
 BATCH_SIZE=12 CHANNELS_LAST=1 PINNED_D2H=0 \
 PRUNE_EMBEDDING_HEAD=0 WARMUP_ITERATIONS=0 \
 DETAILED_CUDA_TIMING=1 RETAIN_GATHER_HOST_BUFFERS=0 \
 PRECOMPUTE_BATCH_GATHER_PLANS=0 \
-CACHE_COORDINATE_CHANNELS=1 \
+CACHE_COORDINATE_CHANNELS=0 \
+CACHE_REFERENCE_COORDINATE_CHANNELS=1 \
 SCORE_ATOL=0 RESUME=1 \
 bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
 ```
 
 Promotion requires exact saved-production equivalence for all 30 sessions and
-all 3,738 slices. Any mismatch rejects E5.
+all 3,738 slices. Any mismatch rejects E5b.

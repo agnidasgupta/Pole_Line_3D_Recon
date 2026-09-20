@@ -11,6 +11,7 @@ from v4_realtime_core_opt2 import (
     active_core_groups_opt,
     active_core_schedule_with_batch_plans_opt,
     assemble_v4_channels_cached_opt,
+    assemble_v4_channels_reference_cached_opt,
     exact_padding,
     predict_v4_sparse_rows_opt,
 )
@@ -106,7 +107,9 @@ def main():
     e3_workspace = V4SparseGpuWorkspace()
     e4_workspace = V4SparseGpuWorkspace()
     e5_workspace = V4SparseGpuWorkspace()
+    e5b_workspace = V4SparseGpuWorkspace()
     assembly_workspace = V4SparseGpuWorkspace()
+    e5b_assembly_workspace = V4SparseGpuWorkspace()
     assembly_data = torch.randn(
         (12, 2, 64, 64, 64), device="cuda", dtype=torch.float32
     )
@@ -130,6 +133,43 @@ def main():
     )
     assert torch.equal(expected_input, actual_input)
     assert reused == 1 and misses == 0
+
+    # E5b must reproduce production input construction for every possible
+    # active-core center in the accepted 400x400x200 grid. Exercise full batches
+    # plus every fixed-batch padding count from one through eleven real cores.
+    all_centers = [
+        np.asarray([x + 24, y + 24, z + 24], dtype=np.int64)
+        for z in range(0, 200, 48)
+        for y in range(0, 400, 48)
+        for x in range(0, 400, 48)
+    ]
+    center_batches = []
+    for start in range(0, len(all_centers), 12):
+        centers = list(all_centers[start:start + 12])
+        centers.extend([centers[-1]] * (12 - len(centers)))
+        center_batches.append(centers)
+    for real_count in range(1, 12):
+        centers = list(all_centers[:real_count])
+        centers.extend([centers[-1]] * (12 - real_count))
+        center_batches.append(centers)
+    for centers in center_batches:
+        expected = reference.assemble_v4_channels_gpu(
+            assembly_data, centers, (400, 400, 200), 64, True, True
+        ).contiguous(memory_format=torch.channels_last_3d)
+        actual, _, _, _ = assemble_v4_channels_reference_cached_opt(
+            assembly_data, centers, (400, 400, 200), 64, True, True,
+            e5b_assembly_workspace,
+        )
+        actual = actual.contiguous(memory_format=torch.channels_last_3d)
+        assert torch.equal(expected, actual)
+        assert actual.is_contiguous(memory_format=torch.channels_last_3d)
+    repeated, cache_hit, _, misses = assemble_v4_channels_reference_cached_opt(
+        assembly_data, center_batches[0], (400, 400, 200), 64, True, True,
+        e5b_assembly_workspace,
+    )
+    repeated = repeated.contiguous(memory_format=torch.channels_last_3d)
+    assert cache_hit == 1 and misses == 0
+    assert e5b_assembly_workspace.model_input is None
     boundary = np.asarray(
         [[0, 0, 0], [96, 82, 64], [48, 48, 48], [80, 60, 20], [7, 75, 63]],
         dtype=np.int32,
@@ -193,6 +233,23 @@ def main():
             assert delta == 0.0, (seed, "e5", name, delta)
         assert np.array_equal(expected["semantic"], e5["semantic"])
         assert e5["timing"]["cache_coordinate_channels"] == 1
+        e5b = predict_v4_sparse_rows_opt(
+            item, model, cfg, calibration, grid_size=grid, core_size=48,
+            batch_size=12, amp="bf16", evaluate_all_cores=False,
+            gpu_coord_channels=True, fixed_batch_shape=True,
+            workspace=e5b_workspace, pinned_d2h=False,
+            detailed_cuda_timing=True, retain_gather_host_buffers=False,
+            precompute_batch_gather_plans=False,
+            cache_coordinate_channels=False,
+            cache_reference_coordinate_channels=True,
+        )
+        for name in ("pole", "line", "objectness"):
+            delta = float(np.max(np.abs(expected[name] - e5b[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e5b", name, delta)
+        assert np.array_equal(expected["semantic"], e5b["semantic"])
+        assert e5b["timing"]["cache_coordinate_channels"] == 0
+        assert e5b["timing"]["cache_reference_coordinate_channels"] == 1
+        assert e5b["timing"]["model_input_reused"] == 0
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")

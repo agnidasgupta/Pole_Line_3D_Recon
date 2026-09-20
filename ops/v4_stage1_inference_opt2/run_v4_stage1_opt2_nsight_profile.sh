@@ -16,11 +16,12 @@ PROFILE_VARIANT=${PROFILE_VARIANT:-e0}
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ "$PROFILE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "PROFILE_TIMEOUT_SECONDS must be an integer"
 case "$PROFILE_VARIANT" in
-  e0) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=0 ;;
-  e3) RETAIN_GATHER_HOST_BUFFERS=1; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=0 ;;
-  e4) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=1; CACHE_COORDINATE_CHANNELS=0 ;;
-  e5) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=1 ;;
-  *) fail "PROFILE_VARIANT must be e0, e3, e4, or e5" ;;
+  e0) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=0; CACHE_REFERENCE_COORDINATE_CHANNELS=0 ;;
+  e3) RETAIN_GATHER_HOST_BUFFERS=1; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=0; CACHE_REFERENCE_COORDINATE_CHANNELS=0 ;;
+  e4) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=1; CACHE_COORDINATE_CHANNELS=0; CACHE_REFERENCE_COORDINATE_CHANNELS=0 ;;
+  e5) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=1; CACHE_REFERENCE_COORDINATE_CHANNELS=0 ;;
+  e5b) RETAIN_GATHER_HOST_BUFFERS=0; PRECOMPUTE_BATCH_GATHER_PLANS=0; CACHE_COORDINATE_CHANNELS=0; CACHE_REFERENCE_COORDINATE_CHANNELS=1 ;;
+  *) fail "PROFILE_VARIANT must be e0, e3, e4, e5, or e5b" ;;
 esac
 for path in "$TOOL_DIR/profile_v4_stage1_opt2.py" "$TOOL_DIR/inventory_v4_stage1_model.py" "$HOST_INPUT" "$MODEL" "$CALIBRATION"; do
   [ -e "$path" ] || fail "missing required path: $path"
@@ -48,6 +49,15 @@ else
   if grep -q '^cache_coordinate_channels=' "$RUN_ROOT/RUN_INFO.txt"; then
     grep -qx 'cache_coordinate_channels=0' "$RUN_ROOT/RUN_INFO.txt" || \
       fail "$PROFILE_VARIANT profile source unexpectedly enabled E5"
+  fi
+fi
+if [ "$PROFILE_VARIANT" = e5b ]; then
+  grep -qx 'cache_reference_coordinate_channels=1' "$RUN_ROOT/RUN_INFO.txt" || \
+    fail "E5b profile source run did not enable reference coordinate caching"
+else
+  if grep -q '^cache_reference_coordinate_channels=' "$RUN_ROOT/RUN_INFO.txt"; then
+    grep -qx 'cache_reference_coordinate_channels=0' "$RUN_ROOT/RUN_INFO.txt" || \
+      fail "$PROFILE_VARIANT profile source unexpectedly enabled E5b"
   fi
 fi
 if [ "$PROFILE_VARIANT" = e4 ]; then
@@ -101,6 +111,7 @@ profile_args=(
   --retain_gather_host_buffers "$RETAIN_GATHER_HOST_BUFFERS"
   --precompute_batch_gather_plans "$PRECOMPUTE_BATCH_GATHER_PLANS"
   --cache_coordinate_channels "$CACHE_COORDINATE_CHANNELS"
+  --cache_reference_coordinate_channels "$CACHE_REFERENCE_COORDINATE_CHANNELS"
 )
 
 timeout --signal=TERM --kill-after=60 "$PROFILE_TIMEOUT_SECONDS" \
