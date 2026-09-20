@@ -51,12 +51,12 @@ changed a production pole score. E3 produced no repeatable benefit. E4 remained
 exact in two representative runs but saved only 0.37% on average and was rejected
 as operationally insignificant. E5's coordinate/input cache was rejected after
 its full gate changed a production pole score, despite passing representative
-runs. E5b is the narrower follow-up: it caches only coordinate values produced by
-the production batch expression while retaining production `torch.cat`,
-channels-last materialization, and a newly allocated final model input. Its first
-gate is the 157-slice session that rejected E5. See the experiment README and
-inference-complexity audit for its gates and for model/training changes outside
-the V4 production contract.
+runs. E5b narrowed the change to immutable coordinate values while retaining
+production `torch.cat`, channels-last materialization and fresh final inputs.
+E5b passed the original failing session, improved matched Stage 1 wall time by
+1.32%, reduced feature assembly by 55.3%, completed Nsight Systems profiling and
+reproduced saved production outputs exactly across all 3,738 slices in 30
+sessions. See the experiment README and E5b acceptance report for details.
 
 ## Repository layout
 
@@ -74,7 +74,10 @@ The root-level V6.2 files are retained as historical/experimental work. They are
 
 ## External artifacts intentionally not stored in Git
 
-This repository must not contain raw datasets, generated outputs, Stage 1 NPZ caches, trained model/checkpoint files, calibration bundles, or other large runtime artifacts.
+This repository must not contain raw datasets, bulk generated outputs, Stage 1
+NPZ caches, trained model/checkpoint files, calibration bundles, raw Nsight
+binary reports or other large runtime artifacts. Small reviewed Markdown,
+text and JSON profiling summaries may be retained as documentation.
 
 Typical external locations on Nebius include:
 

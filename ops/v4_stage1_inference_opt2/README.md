@@ -34,13 +34,36 @@ baseline_comparable_total:  379.022 -> 209.723 ms (44.67%, 1.807x)
 | E3 retain gather host buffers | Exact, no repeatable benefit | Rejected |
 | E4 precomputed gather plans | Exact twice; mean 0.37% faster | Rejected as operationally insignificant |
 | E5 coordinate/input cache | Representative exact; full gate drifted after 14 sessions | Rejected |
-| E5b reference coordinate cache | Pending | Current isolated experiment |
+| E5b reference coordinate cache | Exact on 3,738 slices / 30 sessions; 1.32% faster in matched gate | Accepted Opt2 candidate |
 
 E5 reduced the two-run representative mean from 121.648 to 119.954 ms, but its
 30-session gate failed on session 15. One production pole score changed by
 `0.00019707530736923218`. A fresh E0 run reproduced that complete 157-slice
 session exactly, proving the failure belongs to E5 rather than the environment.
 E5 must not be resumed or promoted.
+
+E5b subsequently passed the session that rejected E5, a fresh matched timing
+pair, CUDA-timed Nsight Systems profiling and the complete 30-session gate.
+
+## Accepted E5b result
+
+The decisive same-session consecutive comparison was:
+
+| Mean per slice | E0 paired control | E5b repeat | E5b change |
+|---|---:|---:|---:|
+| Stage 1 wall time | 88.496 ms | 87.328 ms | -1.168 ms, **1.32% faster** |
+| GPU feature assembly | 2.344 ms | 1.047 ms | -1.297 ms, **55.3% faster** |
+| GPU model and score fusion | 78.144 ms | 78.060 ms | effectively unchanged |
+
+The full acceptance gate completed all 3,738 slices in 30 sessions with zero
+failed sessions and 30 exact saved-production equivalence reports. This is an
+implementation result, not a quality judgment against incomplete labels.
+
+The accepted E5b Nsight Systems run used three warm-up and five measured passes,
+CUDA Profiler API capture boundaries, and CUDA/NVTX/OS-runtime tracing. The raw
+`.nsys-rep` stays outside Git. See
+[`E5B_ACCEPTANCE_REPORT.md`](E5B_ACCEPTANCE_REPORT.md) for the method, timing and
+artifact policy.
 
 ## Why E5b
 
@@ -79,11 +102,11 @@ for model-level and future training-level findings.
 
 ```bash
 cd /Users/agni/Downloads
-shasum -a 256 -c V4_Stage1_Opt2_E5b_Reference_Coordinate_Cache_v8.zip.sha256
+shasum -a 256 -c V4_Stage1_Opt2_E5b_Accepted_Slim_Results_v9.zip.sha256
 
 REPO=/Users/agni/dev/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
 BRANCH=v4-stage1-inference-opt2
-ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E5b_Reference_Coordinate_Cache_v8.zip
+ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E5b_Accepted_Slim_Results_v9.zip
 
 git -C "$REPO" status --short
 git -C "$REPO" fetch origin "$BRANCH"
@@ -103,7 +126,7 @@ Review and push:
 git -C "$REPO" add README.md ops/v4_stage1_inference_opt2
 git -C "$REPO" diff --cached --check
 git -C "$REPO" diff --cached --name-only
-git -C "$REPO" commit -m "Add production-gated Stage1 E5b coordinate cache"
+git -C "$REPO" commit -m "Accept production-equivalent Stage1 E5b optimization"
 git -C "$REPO" push origin "$BRANCH"
 ```
 
@@ -271,3 +294,40 @@ bash "$OPS/launch_v4_stage1_opt2_experiment.sh"
 
 Promotion requires exact saved-production equivalence for all 30 sessions and
 all 3,738 slices. Any mismatch rejects E5b.
+
+## Package compact E5b results
+
+The packager requires the successful full-run and profile pointers. It creates a
+sub-100 MiB archive containing only timing CSVs, metrics, manifests, completion
+markers, equivalence reports and text/JSON Nsight summaries:
+
+```bash
+RUN_ROOT=$(cat /home/agni/V4_STAGE1_OPT2_E5B_FULL30_ROOT.txt)
+PROFILE_ROOT=$(cat /home/agni/LATEST_V4_STAGE1_OPT2_PROFILE.txt)
+
+RUN_ROOT="$RUN_ROOT" \
+PROFILE_ROOT="$PROFILE_ROOT" \
+bash "$OPS/package_v4_stage1_opt2_results.sh"
+```
+
+Success requires:
+
+```text
+PACKAGE_OK
+ACCEPTED=30 FAILED=0 PRODUCTION_EQUIVALENT=30 SLICES=3738
+```
+
+The archive deliberately excludes NPZ, model/checkpoint, raw dataset,
+per-voxel inference CSV.GZ, `.nsys-rep` and SQLite files. The raw Nsight archive
+is downloaded separately and should not be committed to Git.
+
+## GitHub profiling artifacts
+
+Commit this README and `E5B_ACCEPTANCE_REPORT.md`. Small text/JSON reports such
+as `NSYS_STATS.txt` and `PROFILE_SUMMARY.json` may also be committed after
+reviewing them for environment-specific paths. Do not commit:
+
+- `stage1_opt2_nsys.nsys-rep` or Nsight SQLite exports;
+- Stage 1 NPZs or per-voxel inference CSV.GZ files;
+- model/checkpoint/calibration files;
+- complete generated run directories or result archives.

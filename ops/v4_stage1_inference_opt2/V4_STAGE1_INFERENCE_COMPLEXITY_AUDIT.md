@@ -63,7 +63,7 @@ pole score changed by `0.00019707530736923218`. A fresh E0 run reproduced the
 complete failing session exactly. E5 therefore changed execution behavior and
 is rejected; its full-data run must not be resumed.
 
-### E5b: production-assembled reference coordinate cache — selected
+### E5b: production-assembled reference coordinate cache — accepted
 
 E5b removes E5's reusable final model-input buffer. Coordinate values are
 generated on cache misses by the exact production batched FP32 expression, but
@@ -73,15 +73,18 @@ values are cached.
 
 Its CUDA self-test compares complete E0/E5b inputs with `torch.equal` for all
 405 possible active-core centers and every partial fixed-batch padding count.
-The first saved-production gate is the 157-slice session that rejected E5.
+It passed the 157-slice session that rejected E5, improved matched Stage 1 wall
+time by 1.32%, reduced feature assembly by 55.3%, completed CUDA-timed Nsight
+Systems profiling and reproduced production outputs exactly over 3,738 slices
+in 30 sessions.
 
 ### Reuse the objectness sigmoid — suitable later
 
 `fuse_scores()` computes `sigmoid(objectness)`, after which
 `_run_model_scores()` computes the same sigmoid again for the saved objectness
 output. Returning and reusing the first tensor should remove one dense sigmoid
-without changing its value. This is likely exact and low risk, but it should be
-an isolated experiment only after E5b is accepted or rejected.
+without changing its value. This is likely exact and low risk and is the next
+isolated candidate after the accepted E5b baseline.
 
 ### Evaluate all heads only on the consumed 48-cube core — conditional
 
