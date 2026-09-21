@@ -94,6 +94,10 @@ active-core centers in the 400x400x200 grid and every partial fixed-batch paddin
 count. It also checks exact model outputs. This self-test is necessary but does
 not replace saved-production session gates.
 
+The E7 regression check requires one CUDA Graph capture for the reusable
+workspace and a replay on every inference call. A second call must report graph
+reuse (`cuda_graph_captured=0`), not a second capture.
+
 E0 remains the default. Accepted E5b is enabled only by
 `CACHE_REFERENCE_COORDINATE_CHANNELS=1`; its E3, E4 and E5 experiment flags
 remain disabled. E6 deliberately enables only E3's already-exact host-buffer
@@ -123,11 +127,11 @@ for model-level and future training-level findings.
 
 ```bash
 cd /Users/agni/Downloads
-shasum -a 256 -c V4_Stage1_Opt2_E6_E7_v10.zip.sha256
+shasum -a 256 -c V4_Stage1_Opt2_E6_E7_v10_1.zip.sha256
 
 REPO=/Users/agni/dev/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
 BRANCH=v4-stage1-inference-opt2
-ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E6_E7_v10.zip
+ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E6_E7_v10_1.zip
 
 git -C "$REPO" status --short
 git -C "$REPO" fetch origin "$BRANCH"

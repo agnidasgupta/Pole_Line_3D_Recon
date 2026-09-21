@@ -13,6 +13,15 @@ The comparison is against accepted V4 production output. It is not an
 evaluation against incomplete labels; an unlabelled voxel may still be a real
 pole or line.
 
+## v10.1 self-test correction
+
+The v10 self-test incorrectly required `cuda_graph_captured=1` on both of two
+calls sharing one E7 workspace. The first call correctly captures the graph;
+the second correctly reuses it and reports `cuda_graph_captured=0`. V10.1
+requires exactly one capture across the two calls and successful replay on each
+call. This correction changes only the test invariant. It does not change the
+E5b, E6 or E7 inference procedure.
+
 ## Why E6 includes the gather-buffer lifetime safeguard
 
 The earlier E2 timing-disabled experiment drifted. Detailed CUDA events had

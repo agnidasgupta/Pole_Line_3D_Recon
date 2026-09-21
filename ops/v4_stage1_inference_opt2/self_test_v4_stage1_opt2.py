@@ -110,6 +110,8 @@ def main():
     e5b_workspace = V4SparseGpuWorkspace()
     e6_workspace = V4SparseGpuWorkspace()
     e7_workspace = V4SparseGpuWorkspace()
+    e7_capture_count = 0
+    e7_call_count = 0
     assembly_workspace = V4SparseGpuWorkspace()
     e5b_assembly_workspace = V4SparseGpuWorkspace()
     assembly_data = torch.randn(
@@ -289,8 +291,18 @@ def main():
         assert np.array_equal(expected["semantic"], e7["semantic"])
         assert e7["timing"]["detailed_cuda_timing"] == 0
         assert e7["timing"]["use_cuda_graph"] == 1
-        assert e7["timing"]["cuda_graph_captured"] == 1
+        # A workspace captures its fixed-shape graph exactly once. Subsequent
+        # calls must reuse that graph rather than reporting a second capture.
+        expected_capture = int(e7_call_count == 0)
+        actual_capture = int(e7["timing"]["cuda_graph_captured"])
+        assert actual_capture == expected_capture, (
+            seed, "e7", "cuda_graph_captured", actual_capture, expected_capture
+        )
+        e7_capture_count += actual_capture
+        e7_call_count += 1
         assert e7["timing"]["cuda_graph_replays"] > 0
+    assert e7_call_count == 2
+    assert e7_capture_count == 1
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")
