@@ -14,6 +14,10 @@ def parse_args():
     p.add_argument("roots", nargs="+", help="one or more Opt2 run roots")
     p.add_argument("--output", help="optional CSV output path")
     p.add_argument("--group-id", help="compare timing only for one matching session")
+    p.add_argument(
+        "--exclude-first-slices", type=int, default=0,
+        help="exclude this many initial timing rows per session (report both trimmed and untrimmed separately)",
+    )
     return p.parse_args()
 
 
@@ -28,6 +32,8 @@ def read_info(path: Path):
 
 def main():
     a = parse_args()
+    if a.exclude_first_slices < 0:
+        raise ValueError("--exclude-first-slices must be >= 0")
     rows = []
     for raw in a.roots:
         root = Path(raw).resolve()
@@ -40,6 +46,14 @@ def main():
             timing = timing[timing["group_id"].astype(str).eq(a.group_id)].copy()
             if timing.empty:
                 raise RuntimeError(f"group_id {a.group_id!r} is absent from {root}")
+        timing = timing.sort_values(["group_id", "slice_seq"], kind="stable").reset_index(drop=True)
+        if a.exclude_first_slices:
+            ordinal = timing.groupby("group_id", sort=False).cumcount()
+            timing = timing.loc[ordinal.ge(a.exclude_first_slices)].copy()
+            if timing.empty:
+                raise RuntimeError(
+                    f"no timing rows remain after excluding {a.exclude_first_slices} per session in {root}"
+                )
         reports = [json.loads(path.read_text()) for path in sorted((root / "status").glob("*.production_equivalence.json"))]
         if not reports:
             raise RuntimeError(f"no production-equivalence reports in {root}")
@@ -60,6 +74,8 @@ def main():
             "variant": info.get("variant_name", root.name),
             "production_equivalence": "PASS" if passed else "BLOCK",
             "sessions": int(timing["group_id"].astype(str).nunique()),
+            "timed_slices": int(len(timing)),
+            "excluded_first_slices_per_session": int(a.exclude_first_slices),
             "known_positive_losses": lost,
             "known_positive_class_flips": flips,
             "unverified_additions": additions,
@@ -77,6 +93,7 @@ def main():
             "precompute_batch_gather_plans": info.get("precompute_batch_gather_plans", "0"),
             "cache_coordinate_channels": info.get("cache_coordinate_channels", "0"),
             "cache_reference_coordinate_channels": info.get("cache_reference_coordinate_channels", "0"),
+            "use_cuda_graph": info.get("use_cuda_graph", "0"),
             "prune_embedding_head": info.get("prune_embedding_head"),
             "run_root": str(root),
         }

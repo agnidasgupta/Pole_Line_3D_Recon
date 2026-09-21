@@ -108,6 +108,8 @@ def main():
     e4_workspace = V4SparseGpuWorkspace()
     e5_workspace = V4SparseGpuWorkspace()
     e5b_workspace = V4SparseGpuWorkspace()
+    e6_workspace = V4SparseGpuWorkspace()
+    e7_workspace = V4SparseGpuWorkspace()
     assembly_workspace = V4SparseGpuWorkspace()
     e5b_assembly_workspace = V4SparseGpuWorkspace()
     assembly_data = torch.randn(
@@ -250,6 +252,45 @@ def main():
         assert e5b["timing"]["cache_coordinate_channels"] == 0
         assert e5b["timing"]["cache_reference_coordinate_channels"] == 1
         assert e5b["timing"]["model_input_reused"] == 0
+
+        e6 = predict_v4_sparse_rows_opt(
+            item, model, cfg, calibration, grid_size=grid, core_size=48,
+            batch_size=12, amp="bf16", evaluate_all_cores=False,
+            gpu_coord_channels=True, fixed_batch_shape=True,
+            workspace=e6_workspace, pinned_d2h=False,
+            detailed_cuda_timing=False, retain_gather_host_buffers=True,
+            precompute_batch_gather_plans=False,
+            cache_coordinate_channels=False,
+            cache_reference_coordinate_channels=True,
+            use_cuda_graph=False,
+        )
+        for name in ("pole", "line", "objectness"):
+            delta = float(np.max(np.abs(expected[name] - e6[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e6", name, delta)
+        assert np.array_equal(expected["semantic"], e6["semantic"])
+        assert e6["timing"]["detailed_cuda_timing"] == 0
+        assert e6["timing"]["retain_gather_host_buffers"] == 1
+        assert e6["timing"]["use_cuda_graph"] == 0
+
+        e7 = predict_v4_sparse_rows_opt(
+            item, model, cfg, calibration, grid_size=grid, core_size=48,
+            batch_size=12, amp="bf16", evaluate_all_cores=False,
+            gpu_coord_channels=True, fixed_batch_shape=True,
+            workspace=e7_workspace, pinned_d2h=False,
+            detailed_cuda_timing=False, retain_gather_host_buffers=True,
+            precompute_batch_gather_plans=False,
+            cache_coordinate_channels=False,
+            cache_reference_coordinate_channels=True,
+            use_cuda_graph=True,
+        )
+        for name in ("pole", "line", "objectness"):
+            delta = float(np.max(np.abs(expected[name] - e7[name]), initial=0.0))
+            assert delta == 0.0, (seed, "e7", name, delta)
+        assert np.array_equal(expected["semantic"], e7["semantic"])
+        assert e7["timing"]["detailed_cuda_timing"] == 0
+        assert e7["timing"]["use_cuda_graph"] == 1
+        assert e7["timing"]["cuda_graph_captured"] == 1
+        assert e7["timing"]["cuda_graph_replays"] > 0
     assert actual["timing"]["workspace_reused"] == 1
     assert actual["timing"]["pinned_d2h"] == 1
     print("V4_STAGE1_OPT2_SELF_TEST_OK")

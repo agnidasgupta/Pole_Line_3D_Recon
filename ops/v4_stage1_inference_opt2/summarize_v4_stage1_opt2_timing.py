@@ -25,6 +25,7 @@ COMPONENTS = [
     ("gpu_gather_plan_ms", "host occupied-row gather-index plan"),
     ("gpu_gather_ms", "gather core predictions into occupied-row arrays"),
     ("d2h_gather_ms", "single occupied-row result transfer to host"),
+    ("cuda_graph_capture_ms", "one-time CUDA Graph setup on the first inferred slice"),
     ("stage1_wall_ms", "complete Stage1 prediction call"),
     ("stage1_artifact_write_ms", "atomic NPZ and metadata JSON write"),
     ("stage1_manifest_write_ms", "atomic session manifest update"),

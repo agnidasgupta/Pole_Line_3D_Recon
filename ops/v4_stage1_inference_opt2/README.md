@@ -7,7 +7,7 @@ It does not change the production model or redefine inference quality.
 
 - accepted checkpoint and calibration;
 - complete `MultiHeadVoxelNet3D` and every trained head;
-- eager PyTorch, active-GPU, BF16, batch 12 and channels-last;
+- active-GPU, BF16, batch 12 and channels-last;
 - 64-cube input patches and 48-cube output cores;
 - identical core order, model inputs, fusion, thresholds and serialization;
 - no compilation, pruning, relabeling, ONNX export or warm-up;
@@ -30,11 +30,13 @@ baseline_comparable_total:  379.022 -> 209.723 ms (44.67%, 1.807x)
 |---|---|---|
 | E0 optimized control | Exact on 3,738 slices / 30 sessions | Accepted control |
 | E1 pinned D2H | Exact, slower overall | Rejected |
-| E2 remove detailed CUDA events | Production score drift | Rejected |
+| E2 remove detailed CUDA events | Production score drift from unsafe asynchronous gather-index source lifetime | Rejected |
 | E3 retain gather host buffers | Exact, no repeatable benefit | Rejected |
 | E4 precomputed gather plans | Exact twice; mean 0.37% faster | Rejected as operationally insignificant |
 | E5 coordinate/input cache | Representative exact; full gate drifted after 14 sessions | Rejected |
 | E5b reference coordinate cache | Exact on 3,738 slices / 30 sessions; 1.32% faster in matched gate | Accepted Opt2 candidate |
+| E6 E5b + timing off + safe gather lifetime | Pending | Test only after installing this revision |
+| E7 E6 + CUDA Graph replay | Pending | Test only after E6 exactness passes twice |
 
 E5 reduced the two-run representative mean from 121.648 to 119.954 ms, but its
 30-session gate failed on session 15. One production pole score changed by
@@ -92,8 +94,27 @@ active-core centers in the 400x400x200 grid and every partial fixed-batch paddin
 count. It also checks exact model outputs. This self-test is necessary but does
 not replace saved-production session gates.
 
-E0 remains the default. E5b is enabled only by
-`CACHE_REFERENCE_COORDINATE_CHANNELS=1`. E3, E4 and E5 must all remain disabled.
+E0 remains the default. Accepted E5b is enabled only by
+`CACHE_REFERENCE_COORDINATE_CHANNELS=1`; its E3, E4 and E5 experiment flags
+remain disabled. E6 deliberately enables only E3's already-exact host-buffer
+lifetime safeguard while removing detailed events.
+
+## E6 and E7
+
+E6 retries removal of detailed CUDA timing without repeating E2's asynchronous
+buffer-lifetime error. It requires `RETAIN_GATHER_HOST_BUFFERS=1`, which keeps
+the pinned gather-index sources alive until the existing end-of-slice CUDA
+synchronization. It changes no inference values or operations.
+
+E7 builds only on an exact E6. It captures the unchanged fixed-shape batch-12
+model forward, all five heads and score-fusion operations in a CUDA Graph.
+Variable-length occupied-row gathering and D2H transfer remain outside the
+graph. E7 is enabled only by `USE_CUDA_GRAPH=1`; no eager fallback is allowed.
+
+Run E6 and E7 strictly in the order documented in
+[`E6_E7_RUNBOOK.md`](E6_E7_RUNBOOK.md). Do not begin asynchronous I/O or the
+in-memory Stage 1 to Stage 2 handoff until one candidate passes the complete
+30-session / 3,738-slice exact saved-output gate.
 
 See [`V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md`](V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md)
 for model-level and future training-level findings.
@@ -102,11 +123,11 @@ for model-level and future training-level findings.
 
 ```bash
 cd /Users/agni/Downloads
-shasum -a 256 -c V4_Stage1_Opt2_E5b_Accepted_Slim_Results_v9.zip.sha256
+shasum -a 256 -c V4_Stage1_Opt2_E6_E7_v10.zip.sha256
 
 REPO=/Users/agni/dev/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
 BRANCH=v4-stage1-inference-opt2
-ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E5b_Accepted_Slim_Results_v9.zip
+ZIP=/Users/agni/Downloads/V4_Stage1_Opt2_E6_E7_v10.zip
 
 git -C "$REPO" status --short
 git -C "$REPO" fetch origin "$BRANCH"

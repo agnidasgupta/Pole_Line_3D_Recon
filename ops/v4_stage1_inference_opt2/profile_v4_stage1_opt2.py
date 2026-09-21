@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile an accepted E0/E3/E4/E5/E5b run without writing Stage1 artifacts."""
+"""Profile an accepted Opt2 run without writing Stage1 artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -35,12 +35,20 @@ def parse_args():
     parser.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
     parser.add_argument("--cache_coordinate_channels", type=int, choices=[0, 1], default=0)
     parser.add_argument("--cache_reference_coordinate_channels", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--detailed_cuda_timing", type=int, choices=[0, 1], default=1)
+    parser.add_argument("--use_cuda_graph", type=int, choices=[0, 1], default=0)
     parser.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
     args = parser.parse_args()
     if args.warmup < 0 or args.iterations < 1:
         parser.error("warmup must be >= 0 and iterations must be >= 1")
     if args.cache_coordinate_channels and args.cache_reference_coordinate_channels:
         parser.error("E5 and E5b coordinate caches are mutually exclusive")
+    if args.use_cuda_graph and args.detailed_cuda_timing:
+        parser.error("E7 CUDA Graph replay requires detailed_cuda_timing=0")
+    if not args.detailed_cuda_timing and not args.retain_gather_host_buffers:
+        parser.error("timing-disabled E6/E7 requires retained gather host buffers")
+    if not args.detailed_cuda_timing and not args.cache_reference_coordinate_channels:
+        parser.error("E6/E7 builds only on accepted E5b reference coordinate caching")
     return args
 
 
@@ -69,11 +77,12 @@ def main():
             channels_last=True, evaluate_all_cores=False,
             gpu_coord_channels=True, fixed_batch_shape=True,
             workspace=workspace, pinned_d2h=False, require_compiled=False,
-            detailed_cuda_timing=True,
+            detailed_cuda_timing=bool(args.detailed_cuda_timing),
             retain_gather_host_buffers=bool(args.retain_gather_host_buffers),
             precompute_batch_gather_plans=bool(args.precompute_batch_gather_plans),
             cache_coordinate_channels=bool(args.cache_coordinate_channels),
             cache_reference_coordinate_channels=bool(args.cache_reference_coordinate_channels),
+            use_cuda_graph=bool(args.use_cuda_graph),
         )
 
     for _ in range(args.warmup):
@@ -83,7 +92,11 @@ def main():
     wall_ms = []
     component_rows = []
     torch.cuda.cudart().cudaProfilerStart()
-    if args.cache_reference_coordinate_channels:
+    if args.use_cuda_graph:
+        variant = "e7_cuda_graph_replay"
+    elif not args.detailed_cuda_timing and args.cache_reference_coordinate_channels:
+        variant = "e6_timing_disabled"
+    elif args.cache_reference_coordinate_channels:
         variant = "e5b_reference_coordinate_cache"
     elif args.cache_coordinate_channels:
         variant = "e5_coordinate_input_cache"
@@ -139,11 +152,12 @@ def main():
             "batch_size": 12,
             "channels_last": True,
             "pinned_d2h": False,
-            "detailed_cuda_timing": True,
+            "detailed_cuda_timing": bool(args.detailed_cuda_timing),
             "retain_gather_host_buffers": bool(args.retain_gather_host_buffers),
             "precompute_batch_gather_plans": bool(args.precompute_batch_gather_plans),
             "cache_coordinate_channels": bool(args.cache_coordinate_channels),
             "cache_reference_coordinate_channels": bool(args.cache_reference_coordinate_channels),
+            "use_cuda_graph": bool(args.use_cuda_graph),
             "full_model_heads": True,
             "patch_size": int(cfg.get("patch_size", 64)),
             "core_size": 48,

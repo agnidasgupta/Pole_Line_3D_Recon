@@ -48,6 +48,8 @@ TIMING_COLUMNS = [
     "cache_coordinate_channels", "cache_reference_coordinate_channels",
     "coordinate_cache_hits", "coordinate_cache_misses",
     "reference_coordinate_batch_cache_hit", "model_input_reused",
+    "use_cuda_graph", "cuda_graph_captured", "cuda_graph_capture_ms",
+    "cuda_graph_replays",
 ]
 
 
@@ -72,11 +74,12 @@ def parse_args():
     )
     p.add_argument("--channels_last", type=int, choices=[1], default=1)
     p.add_argument("--pinned_d2h", type=int, choices=[0, 1], default=0)
-    p.add_argument("--detailed_cuda_timing", type=int, choices=[1], default=1)
+    p.add_argument("--detailed_cuda_timing", type=int, choices=[0, 1], default=1)
     p.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
     p.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
     p.add_argument("--cache_coordinate_channels", type=int, choices=[0, 1], default=0)
     p.add_argument("--cache_reference_coordinate_channels", type=int, choices=[0, 1], default=0)
+    p.add_argument("--use_cuda_graph", type=int, choices=[0, 1], default=0)
     p.add_argument("--prune_embedding_head", type=int, choices=[0], default=0)
     p.add_argument("--warmup_iterations", type=int, choices=[0], default=0)
     p.add_argument("--evaluate_all_cores", type=int, choices=[0], default=0)
@@ -87,6 +90,12 @@ def parse_args():
     a = p.parse_args()
     if a.cache_coordinate_channels and a.cache_reference_coordinate_channels:
         p.error("E5 and E5b coordinate caches are mutually exclusive")
+    if a.use_cuda_graph and a.detailed_cuda_timing:
+        p.error("E7 CUDA Graph replay requires --detailed_cuda_timing 0")
+    if not a.detailed_cuda_timing and not a.retain_gather_host_buffers:
+        p.error("timing-disabled E6/E7 requires --retain_gather_host_buffers 1")
+    if not a.detailed_cuda_timing and not a.cache_reference_coordinate_channels:
+        p.error("E6/E7 builds only on accepted E5b reference coordinate caching")
     return a
 
 
@@ -162,6 +171,7 @@ def main():
         f"precompute_batch_gather_plans={a.precompute_batch_gather_plans} "
         f"cache_coordinate_channels={a.cache_coordinate_channels} "
         f"cache_reference_coordinate_channels={a.cache_reference_coordinate_channels} "
+        f"use_cuda_graph={a.use_cuda_graph} "
         f"prune_embedding={a.prune_embedding_head} warmup_ms={warmup_ms:.1f}",
         flush=True,
     )
@@ -230,6 +240,7 @@ def main():
             precompute_batch_gather_plans=bool(a.precompute_batch_gather_plans),
             cache_coordinate_channels=bool(a.cache_coordinate_channels),
             cache_reference_coordinate_channels=bool(a.cache_reference_coordinate_channels),
+            use_cuda_graph=bool(a.use_cuda_graph),
         )
         infer_ms = (time.perf_counter() - t0) * 1000.0
         center = extract_center_metadata(frame)
@@ -263,6 +274,7 @@ def main():
             "precompute_batch_gather_plans": bool(a.precompute_batch_gather_plans),
             "cache_coordinate_channels": bool(a.cache_coordinate_channels),
             "cache_reference_coordinate_channels": bool(a.cache_reference_coordinate_channels),
+            "use_cuda_graph": bool(a.use_cuda_graph),
             "prune_embedding_head": bool(a.prune_embedding_head),
             "warmup_iterations": int(a.warmup_iterations),
             "model_warmup_ms": float(warmup_ms),
@@ -301,6 +313,7 @@ def main():
             "precompute_batch_gather_plans": int(a.precompute_batch_gather_plans),
             "cache_coordinate_channels": int(a.cache_coordinate_channels),
             "cache_reference_coordinate_channels": int(a.cache_reference_coordinate_channels),
+            "use_cuda_graph": int(a.use_cuda_graph),
             "stage1_artifact_write_ms": artifact_write_ms,
             "stage1_manifest_write_ms": manifest_write_ms,
             "slice_total_ms": (time.perf_counter() - slice_t0) * 1000.0,

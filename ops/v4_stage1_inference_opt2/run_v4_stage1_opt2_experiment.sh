@@ -27,6 +27,7 @@ RETAIN_GATHER_HOST_BUFFERS=${RETAIN_GATHER_HOST_BUFFERS:-0}
 PRECOMPUTE_BATCH_GATHER_PLANS=${PRECOMPUTE_BATCH_GATHER_PLANS:-0}
 CACHE_COORDINATE_CHANNELS=${CACHE_COORDINATE_CHANNELS:-0}
 CACHE_REFERENCE_COORDINATE_CHANNELS=${CACHE_REFERENCE_COORDINATE_CHANNELS:-0}
+USE_CUDA_GRAPH=${USE_CUDA_GRAPH:-0}
 PRUNE_EMBEDDING_HEAD=${PRUNE_EMBEDDING_HEAD:-0}
 WARMUP_ITERATIONS=${WARMUP_ITERATIONS:-0}
 RUN_ID="${RUN_STAMP}_${VARIANT_NAME}"
@@ -59,19 +60,33 @@ group_id() {
 [[ "$COMPILE_MODEL" = 0 ]] || fail "production-preserving experiments require COMPILE_MODEL=0"
 [[ "$CHANNELS_LAST" = 1 ]] || fail "production-preserving experiments require CHANNELS_LAST=1"
 [[ "$PINNED_D2H" =~ ^[01]$ ]] || fail "PINNED_D2H must be 0 or 1"
-[[ "$DETAILED_CUDA_TIMING" = 1 ]] || fail "production-preserving Opt2 experiments require DETAILED_CUDA_TIMING=1"
+[[ "$DETAILED_CUDA_TIMING" =~ ^[01]$ ]] || fail "DETAILED_CUDA_TIMING must be 0 or 1"
 [[ "$RETAIN_GATHER_HOST_BUFFERS" =~ ^[01]$ ]] || fail "RETAIN_GATHER_HOST_BUFFERS must be 0 or 1"
 [[ "$PRECOMPUTE_BATCH_GATHER_PLANS" =~ ^[01]$ ]] || fail "PRECOMPUTE_BATCH_GATHER_PLANS must be 0 or 1"
 [[ "$CACHE_COORDINATE_CHANNELS" =~ ^[01]$ ]] || fail "CACHE_COORDINATE_CHANNELS must be 0 or 1"
 [[ "$CACHE_REFERENCE_COORDINATE_CHANNELS" =~ ^[01]$ ]] || fail "CACHE_REFERENCE_COORDINATE_CHANNELS must be 0 or 1"
+[[ "$USE_CUDA_GRAPH" =~ ^[01]$ ]] || fail "USE_CUDA_GRAPH must be 0 or 1"
 if [ "$PRECOMPUTE_BATCH_GATHER_PLANS" = 1 ] && [ "$RETAIN_GATHER_HOST_BUFFERS" != 0 ]; then
   fail "E4 isolates precomputed gather plans and requires RETAIN_GATHER_HOST_BUFFERS=0"
 fi
 if [ "$CACHE_COORDINATE_CHANNELS" = 1 ] && { [ "$PRECOMPUTE_BATCH_GATHER_PLANS" != 0 ] || [ "$RETAIN_GATHER_HOST_BUFFERS" != 0 ]; }; then
   fail "E5 isolates coordinate/input caching and requires PRECOMPUTE_BATCH_GATHER_PLANS=0 and RETAIN_GATHER_HOST_BUFFERS=0"
 fi
-if [ "$CACHE_REFERENCE_COORDINATE_CHANNELS" = 1 ] && { [ "$CACHE_COORDINATE_CHANNELS" != 0 ] || [ "$PRECOMPUTE_BATCH_GATHER_PLANS" != 0 ] || [ "$RETAIN_GATHER_HOST_BUFFERS" != 0 ]; }; then
-  fail "E5b isolates reference coordinate caching and requires E5, E4, and E3 to be disabled"
+if [ "$CACHE_REFERENCE_COORDINATE_CHANNELS" = 1 ] && { [ "$CACHE_COORDINATE_CHANNELS" != 0 ] || [ "$PRECOMPUTE_BATCH_GATHER_PLANS" != 0 ]; }; then
+  fail "reference coordinate caching requires E5 and E4 to be disabled"
+fi
+if [ "$DETAILED_CUDA_TIMING" = 0 ] && [ "$RETAIN_GATHER_HOST_BUFFERS" != 1 ]; then
+  fail "timing-disabled E6/E7 requires retained gather host buffers for asynchronous H2D source lifetime"
+fi
+if [ "$DETAILED_CUDA_TIMING" = 0 ] && [ "$CACHE_REFERENCE_COORDINATE_CHANNELS" != 1 ]; then
+  fail "E6/E7 builds only on accepted E5b reference coordinate caching"
+fi
+if [ "$USE_CUDA_GRAPH" = 1 ]; then
+  [ "$DETAILED_CUDA_TIMING" = 0 ] || fail "E7 requires DETAILED_CUDA_TIMING=0"
+  [ "$CACHE_REFERENCE_COORDINATE_CHANNELS" = 1 ] || fail "E7 builds only on accepted E5b"
+  [ "$CACHE_COORDINATE_CHANNELS" = 0 ] || fail "E7 requires CACHE_COORDINATE_CHANNELS=0"
+  [ "$PRECOMPUTE_BATCH_GATHER_PLANS" = 0 ] || fail "E7 requires PRECOMPUTE_BATCH_GATHER_PLANS=0"
+  [ "$RETAIN_GATHER_HOST_BUFFERS" = 1 ] || fail "E7 requires the E6 gather-buffer lifetime safeguard"
 fi
 [[ "$PRUNE_EMBEDDING_HEAD" = 0 ]] || fail "production-preserving experiments require PRUNE_EMBEDDING_HEAD=0"
 [[ "$WARMUP_ITERATIONS" = 0 ]] || fail "production-preserving experiments require WARMUP_ITERATIONS=0"
@@ -134,6 +149,7 @@ echo "retain_gather_host_buffers=$RETAIN_GATHER_HOST_BUFFERS"
 echo "precompute_batch_gather_plans=$PRECOMPUTE_BATCH_GATHER_PLANS"
 echo "cache_coordinate_channels=$CACHE_COORDINATE_CHANNELS"
 echo "cache_reference_coordinate_channels=$CACHE_REFERENCE_COORDINATE_CHANNELS"
+echo "use_cuda_graph=$USE_CUDA_GRAPH"
 echo "only_group_id=${ONLY_GROUP_ID:-ALL} expected_sessions=$EXPECTED_SESSIONS"
 echo "score_atol=$SCORE_ATOL"
 
@@ -185,6 +201,7 @@ retain_gather_host_buffers=$RETAIN_GATHER_HOST_BUFFERS
 precompute_batch_gather_plans=$PRECOMPUTE_BATCH_GATHER_PLANS
 cache_coordinate_channels=$CACHE_COORDINATE_CHANNELS
 cache_reference_coordinate_channels=$CACHE_REFERENCE_COORDINATE_CHANNELS
+use_cuda_graph=$USE_CUDA_GRAPH
 prune_embedding_head=$PRUNE_EMBEDDING_HEAD
 warmup_iterations=$WARMUP_ITERATIONS
 only_group_id=$ONLY_GROUP_ID
@@ -250,6 +267,7 @@ for manifest in "${MANIFESTS[@]}"; do
       --precompute_batch_gather_plans "$PRECOMPUTE_BATCH_GATHER_PLANS" \
       --cache_coordinate_channels "$CACHE_COORDINATE_CHANNELS" \
       --cache_reference_coordinate_channels "$CACHE_REFERENCE_COORDINATE_CHANNELS" \
+      --use_cuda_graph "$USE_CUDA_GRAPH" \
       --prune_embedding_head "$PRUNE_EMBEDDING_HEAD" --warmup_iterations "$WARMUP_ITERATIONS" \
       --evaluate_all_cores 0 --gpu_coord_channels 1 \
       --fixed_batch_shape 1 --resume "$RESUME" --max_slices 0 \

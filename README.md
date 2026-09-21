@@ -47,7 +47,9 @@ the saved production outputs (`SCORE_ATOL=0`); this is an implementation guard,
 not evaluation against the incomplete ground-truth labels.
 
 E0 is the accepted control. E2 was rejected after removing detailed CUDA events
-changed a production pole score. E3 produced no repeatable benefit. E4 remained
+exposed an unsafe asynchronous gather-index source lifetime and changed a
+production pole score. E3's lifetime safeguard was exact but produced no
+repeatable benefit while events remained enabled. E4 remained
 exact in two representative runs but saved only 0.37% on average and was rejected
 as operationally insignificant. E5's coordinate/input cache was rejected after
 its full gate changed a production pole score, despite passing representative
@@ -57,6 +59,14 @@ E5b passed the original failing session, improved matched Stage 1 wall time by
 1.32%, reduced feature assembly by 55.3%, completed Nsight Systems profiling and
 reproduced saved production outputs exactly across all 3,738 slices in 30
 sessions. See the experiment README and E5b acceptance report for details.
+
+E6 now tests timing removal only together with E3's exact lifetime safeguard.
+E7 is gated on E6 and adds fixed-shape CUDA Graph replay of the unchanged model
+and score-fusion operators. Both remain experiments until exact paired repeats
+and the complete 30-session / 3,738-slice gate pass. Asynchronous read/infer/write
+and the in-memory Stage 1 to Stage 2 handoff are later, separately gated phases;
+all durable output paths and schemas remain unchanged. See the E6/E7 runbook in
+the Opt2 directory.
 
 ## Repository layout
 

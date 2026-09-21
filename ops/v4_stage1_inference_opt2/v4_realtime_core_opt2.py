@@ -19,7 +19,7 @@ import torch
 import v4_realtime_core as reference
 
 
-OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e5b-reference-coordinate-cache-20260918"
+OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e6-e7-20260921"
 
 
 def active_core_groups_opt(
@@ -176,6 +176,7 @@ class V4SparseGpuWorkspace:
     model_input_spec: tuple | None = None
     coordinate_lines: dict = field(default_factory=dict)
     reference_coordinate_lines: dict = field(default_factory=dict)
+    cuda_graph_runner: object | None = None
 
     def reset(self) -> None:
         self.volume = None
@@ -190,6 +191,7 @@ class V4SparseGpuWorkspace:
         self.model_input_spec = None
         self.coordinate_lines.clear()
         self.reference_coordinate_lines.clear()
+        self.cuda_graph_runner = None
 
     def acquire(self, grid_size, patch_size: int, core_size: int, channels: int, device):
         gx, gy, gz = map(int, grid_size)
@@ -272,6 +274,110 @@ class V4SparseGpuWorkspace:
             self.coordinate_lines[key] = line
         return line, hit
 
+
+class V4CudaGraphScoreRunner:
+    """Replay the unchanged fixed-shape V4 model and score fusion in a CUDA graph.
+
+    The graph owns a static input tensor and the complete five-head model output.
+    Every call copies the current accepted channels-last batch into that tensor,
+    replays the exact eager operators captured after warm-up, and returns views of
+    the persistent graph outputs.  No checkpoint weights, heads, score arithmetic,
+    thresholds, patch geometry, or output decisions are changed.
+    """
+
+    def __init__(self):
+        self.graph = None
+        self.static_input = None
+        self.static_outputs = None
+        self.spec = None
+        self.capture_ms = 0.0
+        self.replays = 0
+
+    @staticmethod
+    def _calibration_spec(calibration: Dict):
+        return (
+            float(calibration["score_sem_weight"]),
+            float(calibration["score_binary_weight"]),
+            float(calibration["score_object_weight"]),
+        )
+
+    @staticmethod
+    def _compute(model, xb, calibration: Dict, amp: str):
+        with torch.inference_mode(), reference.autocast_ctx(amp):
+            out = model(xb)
+        ps, ls = reference.fuse_scores(
+            out,
+            calibration["score_sem_weight"],
+            calibration["score_binary_weight"],
+            calibration["score_object_weight"],
+        )
+        sem = out["semantic"].argmax(dim=1)
+        obj = torch.sigmoid(out["objectness"].float()).squeeze(1)
+        # Retain the complete output mapping so the graph-owned embedding and all
+        # other head allocations remain live even though only production scores
+        # are returned to the gather path.
+        return out, ps, ls, sem, obj
+
+    def _make_spec(self, model, xb, calibration: Dict, amp: str):
+        return (
+            id(model),
+            tuple(xb.shape),
+            tuple(xb.stride()),
+            str(xb.dtype),
+            str(xb.device),
+            str(amp),
+            self._calibration_spec(calibration),
+        )
+
+    def capture(self, model, xb, calibration: Dict, amp: str):
+        if not torch.cuda.is_available() or not xb.is_cuda:
+            raise RuntimeError("E7 CUDA Graph replay requires a CUDA input")
+        if not xb.is_contiguous(memory_format=torch.channels_last_3d):
+            raise RuntimeError("E7 CUDA Graph input must use channels_last_3d")
+        spec = self._make_spec(model, xb, calibration, amp)
+        if self.graph is not None:
+            if spec != self.spec:
+                raise RuntimeError("E7 CUDA Graph fixed input/model contract changed")
+            return
+
+        started = time.perf_counter()
+        self.static_input = torch.empty_like(
+            xb, memory_format=torch.preserve_format
+        )
+        self.static_input.copy_(xb)
+
+        # PyTorch CUDA Graph capture requires allocator/kernels to be warmed on a
+        # side stream before capture.  This warm-up is setup only; its outputs are
+        # discarded and no production row is written from them.
+        warmup_stream = torch.cuda.Stream()
+        warmup_stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(warmup_stream):
+            for _ in range(3):
+                self._compute(model, self.static_input, calibration, amp)
+        torch.cuda.current_stream().wait_stream(warmup_stream)
+        torch.cuda.synchronize()
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            static_outputs = self._compute(
+                model, self.static_input, calibration, amp
+            )
+        torch.cuda.synchronize()
+        self.graph = graph
+        self.static_outputs = static_outputs
+        self.spec = spec
+        self.capture_ms = (time.perf_counter() - started) * 1000.0
+
+    def run(self, model, xb, calibration: Dict, amp: str):
+        self.capture(model, xb, calibration, amp)
+        spec = self._make_spec(model, xb, calibration, amp)
+        if spec != self.spec:
+            raise RuntimeError("E7 CUDA Graph replay contract changed")
+        self.static_input.copy_(xb)
+        self.graph.replay()
+        self.replays += 1
+        _, ps, ls, sem, obj = self.static_outputs
+        return ps, ls, sem, obj
 
 def assemble_v4_channels_cached_opt(
     data_tensor: torch.Tensor,
@@ -444,6 +550,7 @@ def _predict_active_gpu_opt(
     precompute_batch_gather_plans: bool,
     cache_coordinate_channels: bool,
     cache_reference_coordinate_channels: bool,
+    use_cuda_graph: bool,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -496,6 +603,10 @@ def _predict_active_gpu_opt(
         "precompute_batch_gather_plans": int(bool(precompute_batch_gather_plans)),
         "cache_coordinate_channels": int(bool(cache_coordinate_channels)),
         "cache_reference_coordinate_channels": int(bool(cache_reference_coordinate_channels)),
+        "use_cuda_graph": int(bool(use_cuda_graph)),
+        "cuda_graph_captured": 0,
+        "cuda_graph_capture_ms": 0.0,
+        "cuda_graph_replays": 0,
         "coordinate_cache_hits": 0,
         "coordinate_cache_misses": 0,
         "reference_coordinate_batch_cache_hit": 0,
@@ -631,11 +742,22 @@ def _predict_active_gpu_opt(
 
         me = _event_pair(detailed_cuda_timing)
         me[0].record()
-        model, ps, ls, sem, obj = reference._run_model_scores(
-            model, xb, calibration, amp, fallback_state
-        )
-        if require_compiled and fallback_state.get("done", False):
-            raise RuntimeError("compiled execution failed and attempted eager fallback")
+        if use_cuda_graph:
+            if workspace.cuda_graph_runner is None:
+                workspace.cuda_graph_runner = V4CudaGraphScoreRunner()
+            graph_runner = workspace.cuda_graph_runner
+            captured_now = graph_runner.graph is None
+            ps, ls, sem, obj = graph_runner.run(model, xb, calibration, amp)
+            if captured_now:
+                timing["cuda_graph_captured"] = 1
+                timing["cuda_graph_capture_ms"] = float(graph_runner.capture_ms)
+            timing["cuda_graph_replays"] += 1
+        else:
+            model, ps, ls, sem, obj = reference._run_model_scores(
+                model, xb, calibration, amp, fallback_state
+            )
+            if require_compiled and fallback_state.get("done", False):
+                raise RuntimeError("compiled execution failed and attempted eager fallback")
         me[1].record()
         model_events.append(me)
 
@@ -735,6 +857,7 @@ def predict_v4_sparse_rows_opt(
     precompute_batch_gather_plans: bool = False,
     cache_coordinate_channels: bool = False,
     cache_reference_coordinate_channels: bool = False,
+    use_cuda_graph: bool = False,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -749,6 +872,16 @@ def predict_v4_sparse_rows_opt(
         raise ValueError("production-preserving opt2 fixes amp=bf16")
     if cache_coordinate_channels and cache_reference_coordinate_channels:
         raise ValueError("E5 and E5b coordinate caches are mutually exclusive")
+    if not detailed_cuda_timing and not retain_gather_host_buffers:
+        raise ValueError(
+            "timing-disabled execution must retain gather host buffers until the final CUDA synchronization"
+        )
+    if not detailed_cuda_timing and not cache_reference_coordinate_channels:
+        raise ValueError("E6/E7 builds only on accepted E5b reference coordinate caching")
+    if use_cuda_graph and detailed_cuda_timing:
+        raise ValueError("E7 CUDA Graph replay requires detailed_cuda_timing=0")
+    if use_cuda_graph and require_compiled:
+        raise ValueError("E7 CUDA Graph replay does not combine with torch.compile")
     if workspace is None:
         workspace = V4SparseGpuWorkspace()
     return _predict_active_gpu_opt(
@@ -757,4 +890,5 @@ def predict_v4_sparse_rows_opt(
         bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
         bool(retain_gather_host_buffers), bool(precompute_batch_gather_plans),
         bool(cache_coordinate_channels), bool(cache_reference_coordinate_channels),
+        bool(use_cuda_graph),
     )
