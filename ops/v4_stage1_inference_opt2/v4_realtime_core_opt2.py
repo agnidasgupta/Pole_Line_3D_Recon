@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 import v4_realtime_core as reference
+from v4_input_prefetch import _range
 
 
 OPTIMIZATION_VERSION = "v4-stage1-active-gpu-opt2-e6-e7-20260921"
@@ -142,6 +143,68 @@ def active_core_schedule_with_batch_plans_opt(
             )
         )
     return groups, plans
+
+
+def _reference_batch_gather_plan(groups, core_size):
+    """The original E7 per-batch expressions, with identical row/slot order."""
+    core_vol = int(core_size) ** 3
+    offsets = []
+    dest_rows = []
+    for bi, group in enumerate(groups):
+        rr = np.asarray(group["rows"], dtype=np.int64)
+        if len(rr):
+            offsets.append(group["_flat_core"] + bi * core_vol)
+            dest_rows.append(rr)
+    take_np = np.concatenate(offsets).astype(np.int64, copy=False)
+    dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
+    return take_np, dest_np
+
+
+@dataclass(frozen=True)
+class PreparedE7Schedule:
+    """Owned CPU schedule bound to exact coordinates and batching settings.
+
+    Do not mutate groups or gather arrays. The producer finishes all construction
+    before handing the plan to inference; no CUDA tensors or workspace are used.
+    """
+    coords: np.ndarray
+    grid_size: tuple
+    core_size: int
+    batch_size: int
+    precompute_batch_gather_plans: bool
+    groups: list
+    batch_gather_plans: object
+    prepare_ms: float
+
+    def validate(self, coords, grid_size, core_size, batch_size, precompute_batch_gather_plans):
+        config = (tuple(map(int, grid_size)), int(core_size), int(batch_size), bool(precompute_batch_gather_plans))
+        if config != (self.grid_size, self.core_size, self.batch_size, self.precompute_batch_gather_plans):
+            raise ValueError("Prepared E7 schedule grid/core/batch/mode changed")
+        if not np.array_equal(np.asarray(coords, dtype=np.int32), self.coords):
+            raise ValueError("Prepared E7 schedule coordinates changed")
+        return self.groups, self.batch_gather_plans
+
+
+def prepare_e7_schedule(coords, grid_size=(400,400,200), core_size=48, batch_size=12,
+                        *, precompute_batch_gather_plans=False, prepare_gather_plans=False):
+    """Run unchanged E7 scheduling on a CPU input worker, with stale-plan checks."""
+    start = time.perf_counter()
+    with _range("input/core_schedule"):
+        snapshot = np.array(coords, dtype=np.int32, copy=True)
+        plans = None
+        if precompute_batch_gather_plans:
+            groups, plans = active_core_schedule_with_batch_plans_opt(snapshot, grid_size, core_size, batch_size)
+        else:
+            groups = active_core_groups_opt(snapshot, grid_size, core_size)
+            reference._prepare_group_gather(groups, snapshot, core_size)
+        if prepare_gather_plans and plans is None:
+            with _range("input/gather_plans"):
+                plans = [_reference_batch_gather_plan(groups[i:i+batch_size], core_size)
+                         for i in range(0, len(groups), batch_size)]
+        snapshot.flags.writeable = False
+    return PreparedE7Schedule(snapshot, tuple(map(int, grid_size)), int(core_size), int(batch_size),
+                              bool(precompute_batch_gather_plans), groups, plans,
+                              (time.perf_counter()-start)*1000)
 
 
 def exact_padding(grid_size: Sequence[int], patch_size: int, core_size: int):
@@ -437,6 +500,7 @@ def assemble_v4_channels_reference_cached_opt(
     use_coord: bool,
     use_dist: bool,
     workspace: V4SparseGpuWorkspace,
+    kernel_factory_input_pack: bool = False,
 ):
     """Cache exact production coordinate values without changing input assembly.
 
@@ -446,6 +510,8 @@ def assemble_v4_channels_reference_cached_opt(
     ``v4_realtime_core.assemble_v4_channels_gpu``.  Only those immutable 1-D
     values are retained.  The final model input is newly materialized exactly as
     in production; E5's reusable final input buffer is not used.
+    The optional Kernel Factory path fuses final materialization into a fresh
+    channels-last allocation, preserving these coordinate calculations.
     """
     if not use_coord:
         raise ValueError("E5b reference coordinate caching requires coordinate channels")
@@ -500,6 +566,15 @@ def assemble_v4_channels_reference_cached_opt(
     zv = torch.stack(
         [workspace.reference_coordinate_lines[key] for key in keys[2]], dim=0
     )
+    # Experimental load/store fusion: keep E5b's exact cached batched arithmetic.
+    # Allocate a fresh output for every batch; never use E5's model_input buffer.
+    if (kernel_factory_input_pack and use_dist and batch == 12 and patch == 64
+            and data_tensor.dtype == torch.float32 and data_tensor.is_cuda):
+        from v4_input_pack import try_copy_cached_input
+        fresh = torch.empty((batch, 5, patch, patch, patch), device=device,
+                            dtype=data_tensor.dtype, memory_format=torch.channels_last_3d)
+        if try_copy_cached_input(data_tensor, xv, yv, zv, fresh):
+            return fresh, int(all_hit), batch * 3 - misses, misses
     xch = xv[:, None, None, None, :].expand(batch, 1, patch, patch, patch)
     ych = yv[:, None, None, :, None].expand(batch, 1, patch, patch, patch)
     zch = zv[:, None, :, None, None].expand(batch, 1, patch, patch, patch)
@@ -551,6 +626,8 @@ def _predict_active_gpu_opt(
     cache_coordinate_channels: bool,
     cache_reference_coordinate_channels: bool,
     use_cuda_graph: bool,
+    kernel_factory_input_pack: bool,
+    prepared_schedule: PreparedE7Schedule | None,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("optimized V4 Stage 1 requires CUDA")
@@ -565,13 +642,17 @@ def _predict_active_gpu_opt(
 
     schedule_t0 = time.perf_counter()
     batch_gather_plans = None
-    if precompute_batch_gather_plans:
-        groups, batch_gather_plans = active_core_schedule_with_batch_plans_opt(
-            item["coords"], grid_size, core_size, batch_size
-        )
-    else:
-        groups = active_core_groups_opt(item["coords"], grid_size, core_size)
-        reference._prepare_group_gather(groups, item["coords"], core_size)
+    with _range("stage1/core_schedule"):
+        if prepared_schedule is not None:
+            groups, batch_gather_plans = prepared_schedule.validate(
+                item["coords"], grid_size, core_size, batch_size, precompute_batch_gather_plans)
+        elif precompute_batch_gather_plans:
+            groups, batch_gather_plans = active_core_schedule_with_batch_plans_opt(
+                item["coords"], grid_size, core_size, batch_size
+            )
+        else:
+            groups = active_core_groups_opt(item["coords"], grid_size, core_size)
+            reference._prepare_group_gather(groups, item["coords"], core_size)
     schedule_ms = (time.perf_counter() - schedule_t0) * 1000.0
     n = len(item["coords"])
     timing = {
@@ -579,6 +660,8 @@ def _predict_active_gpu_opt(
         "active_cores": len(groups),
         "total_possible_cores": int(math.ceil(gx/core_size)*math.ceil(gy/core_size)*math.ceil(gz/core_size)),
         "core_schedule_ms": schedule_ms,
+        "prepared_core_schedule": int(prepared_schedule is not None),
+        "prepared_core_schedule_ms": prepared_schedule.prepare_ms if prepared_schedule is not None else 0.0,
         "patch_build_ms": 0.0,
         "host_batch_pack_ms": 0.0,
         "host_pin_ms": 0.0,
@@ -604,6 +687,7 @@ def _predict_active_gpu_opt(
         "cache_coordinate_channels": int(bool(cache_coordinate_channels)),
         "cache_reference_coordinate_channels": int(bool(cache_reference_coordinate_channels)),
         "use_cuda_graph": int(bool(use_cuda_graph)),
+        "kernel_factory_input_pack": int(bool(kernel_factory_input_pack)),
         "cuda_graph_captured": 0,
         "cuda_graph_capture_ms": 0.0,
         "cuda_graph_replays": 0,
@@ -641,13 +725,14 @@ def _predict_active_gpu_opt(
     reset_event[1].record()
 
     pin_t0 = time.perf_counter()
-    coords_np = np.asarray(item["coords"], dtype=np.int64)
-    dist_np = np.asarray(item["dist_values"], dtype=np.float32)
-    coords_host, pinned_coords = reference._pin_numpy_tensor(coords_np, torch.int64)
-    dist_host = None
-    pinned_dist = False
-    if use_dist:
-        dist_host, pinned_dist = reference._pin_numpy_tensor(dist_np, torch.float32)
+    with _range("stage1/host_pin"):
+        coords_np = np.asarray(item["coords"], dtype=np.int64)
+        dist_np = np.asarray(item["dist_values"], dtype=np.float32)
+        coords_host, pinned_coords = reference._pin_numpy_tensor(coords_np, torch.int64)
+        dist_host = None
+        pinned_dist = False
+        if use_dist:
+            dist_host, pinned_dist = reference._pin_numpy_tensor(dist_np, torch.float32)
     timing["host_pin_ms"] = (time.perf_counter() - pin_t0) * 1000.0
     timing["host_pinned"] = int(bool(pinned_coords and (pinned_dist if use_dist else True)))
 
@@ -726,7 +811,8 @@ def _predict_active_gpu_opt(
             timing["coordinate_cache_misses"] += int(cache_misses)
         elif cache_reference_coordinate_channels:
             xb, cache_hit, cache_hits, cache_misses = assemble_v4_channels_reference_cached_opt(
-                xb, padded_centers, grid_size, patch, use_coord, use_dist, workspace
+                xb, padded_centers, grid_size, patch, use_coord, use_dist, workspace,
+                kernel_factory_input_pack=kernel_factory_input_pack,
             )
             timing["coordinate_cache_hits"] += int(cache_hits)
             timing["coordinate_cache_misses"] += int(cache_misses)
@@ -762,18 +848,11 @@ def _predict_active_gpu_opt(
         model_events.append(me)
 
         gather_plan_t0 = time.perf_counter()
-        if batch_gather_plans is not None:
-            take_np, dest_np = batch_gather_plans[batch_index]
-        else:
-            offsets = []
-            dest_rows = []
-            for bi, group in enumerate(bg):
-                rr = np.asarray(group["rows"], dtype=np.int64)
-                if len(rr):
-                    offsets.append(group["_flat_core"] + bi * core_vol)
-                    dest_rows.append(rr)
-            take_np = np.concatenate(offsets).astype(np.int64, copy=False)
-            dest_np = np.concatenate(dest_rows).astype(np.int64, copy=False)
+        with _range("stage1/gather_plan"):
+            if batch_gather_plans is not None:
+                take_np, dest_np = batch_gather_plans[batch_index]
+            else:
+                take_np, dest_np = _reference_batch_gather_plan(bg, core_size)
         timing["gpu_gather_plan_ms"] += (time.perf_counter() - gather_plan_t0) * 1000.0
 
         ge = _event_pair(detailed_cuda_timing)
@@ -798,20 +877,21 @@ def _predict_active_gpu_opt(
         timing["batches"] += 1
 
     d2h_t0 = time.perf_counter()
-    score_device = torch.stack([pole_gpu, line_gpu, objectness_gpu], dim=1)
-    if pinned_d2h:
-        score_host, semantic_host, allocated = workspace.acquire_host_outputs(n)
-        score_host.copy_(score_device, non_blocking=True)
-        semantic_host.copy_(semantic_gpu, non_blocking=True)
-        torch.cuda.synchronize()
-        # Detach returned arrays from reusable staging before the next slice.
-        score_cpu = score_host.numpy().copy()
-        semantic_cpu = semantic_host.numpy().copy()
-        timing["host_output_reused"] = int(not allocated)
-    else:
-        score_cpu = score_device.cpu().numpy()
-        semantic_cpu = semantic_gpu.cpu().numpy()
-        torch.cuda.synchronize()
+    with _range("stage1/d2h_gather"):
+        score_device = torch.stack([pole_gpu, line_gpu, objectness_gpu], dim=1)
+        if pinned_d2h:
+            score_host, semantic_host, allocated = workspace.acquire_host_outputs(n)
+            score_host.copy_(score_device, non_blocking=True)
+            semantic_host.copy_(semantic_gpu, non_blocking=True)
+            torch.cuda.synchronize()
+            # Detach returned arrays from reusable staging before the next slice.
+            score_cpu = score_host.numpy().copy()
+            semantic_cpu = semantic_host.numpy().copy()
+            timing["host_output_reused"] = int(not allocated)
+        else:
+            score_cpu = score_device.cpu().numpy()
+            semantic_cpu = semantic_gpu.cpu().numpy()
+            torch.cuda.synchronize()
     # All asynchronous index copies are complete after the synchronization
     # above, so E3 can now release the retained pinned host tensors safely.
     gather_host_refs.clear()
@@ -858,6 +938,8 @@ def predict_v4_sparse_rows_opt(
     cache_coordinate_channels: bool = False,
     cache_reference_coordinate_channels: bool = False,
     use_cuda_graph: bool = False,
+    kernel_factory_input_pack: bool = False,
+    prepared_schedule: PreparedE7Schedule | None = None,
 ):
     """Run an isolated active-GPU candidate under production-output equivalence."""
     if evaluate_all_cores or not gpu_coord_channels:
@@ -870,6 +952,8 @@ def predict_v4_sparse_rows_opt(
         raise ValueError("production-preserving opt2 requires fixed_batch_shape=1")
     if amp != "bf16":
         raise ValueError("production-preserving opt2 fixes amp=bf16")
+    if kernel_factory_input_pack and not cache_reference_coordinate_channels:
+        raise ValueError("Kernel Factory packing requires accepted E5b coordinate arithmetic")
     if cache_coordinate_channels and cache_reference_coordinate_channels:
         raise ValueError("E5 and E5b coordinate caches are mutually exclusive")
     if not detailed_cuda_timing and not retain_gather_host_buffers:
@@ -890,5 +974,5 @@ def predict_v4_sparse_rows_opt(
         bool(pinned_d2h), bool(require_compiled), bool(detailed_cuda_timing),
         bool(retain_gather_host_buffers), bool(precompute_batch_gather_plans),
         bool(cache_coordinate_channels), bool(cache_reference_coordinate_channels),
-        bool(use_cuda_graph),
+        bool(use_cuda_graph), bool(kernel_factory_input_pack), prepared_schedule,
     )

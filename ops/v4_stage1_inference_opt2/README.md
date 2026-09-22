@@ -1,5 +1,8 @@
 # V4 Stage 1 Opt2: production-preserving inference experiments
 
+> Local H100 experiments: this checkout adds opt-in model input-copy fusion, bounded input prefetch, experimental core scheduling ahead, ordered asynchronous output writes, and an optional retained Kernel Factory packing kernel on top of accepted E7. These additions have mock-weight regression evidence, not production acceptance. Step 14 also found an unresolved separate-process output discrepancy in unchanged upstream E7; see the current report before interpreting exactness claims. Usage and validation scope: [H100_OPTIMIZATION_NOTES.md](../../H100_OPTIMIZATION_NOTES.md).
+
+
 This directory reduces execution overhead around the accepted V4 Stage 1 model.
 It does not change the production model or redefine inference quality.
 

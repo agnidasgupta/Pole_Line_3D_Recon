@@ -59,8 +59,10 @@ def pca_geometry(points_xyz: np.ndarray, voxel_size=.5):
                     coef,*_=np.linalg.lstsq(A,zf,rcond=None); fit=A@coef; rmse=float(np.sqrt(np.mean((fit-zf)**2)))
                     sag=float(max(0.,.5*((coef[0]-coef[1]+coef[2])+(coef[0]+coef[1]+coef[2]))-coef[2]))
             except (np.linalg.LinAlgError,ValueError,FloatingPointError): pass
+    # radial is float64; one partition supplies the same two linear quantiles.
+    radius_quantiles=np.quantile(radial,[.5,.9])
     return dict(principal=direction,linearity=linearity,planarity=planarity,scattering=scattering,
-                radius_p50_ft=float(np.quantile(radial,.5)),radius_p90_ft=float(np.quantile(radial,.9)),endpoints=endpoints,
+                radius_p50_ft=float(radius_quantiles[0]),radius_p90_ft=float(radius_quantiles[1]),endpoints=endpoints,
                 xy_path_length_ft=path,xy_endpoint_distance_ft=endpoint_d,xy_tortuosity=tort,
                 quadratic_rmse_ft=rmse,sag_estimate_ft=sag)
 
@@ -110,10 +112,19 @@ def _component_frame(coords, score, class_name, voxel_size=.5, gt_points=None, m
     rows=[]; points={}
     if n==0: return pd.DataFrame(),labels,points
     gt_tree=cKDTree(np.asarray(gt_points,float)) if gt_points is not None and len(gt_points) else None
+    # Stable grouping preserves the exact ascending source-row indices returned
+    # by flatnonzero(labels == cid), without scanning all voxels for every ID.
+    counts=np.bincount(labels,minlength=n+1)
+    ends=np.cumsum(counts)
+    grouped=np.argsort(labels,kind='stable')
     for cid in range(1,n+1):
-        idx=np.flatnonzero(labels==cid)
-        if len(idx)<int(min_voxels): continue
+        if counts[cid]<int(min_voxels): continue
+        idx=grouped[ends[cid-1]:ends[cid]]
         pts=coords[idx].astype(np.int32); vals=np.asarray(score,dtype=np.float32)[idx]
+        score_p10=np.quantile(vals,.1)
+        # NumPy versions differ in scalar quantile promotion. Match the original
+        # scalar's dtype rather than promoting float32 scores with float64 q.
+        score_quantiles=np.quantile(vals,np.asarray([.5,.9],dtype=np.asarray(score_p10).dtype))
         geo=pca_geometry(pts,voxel_size); mins=pts.min(0); maxs=pts.max(0); spans=(maxs-mins+1)*voxel_size
         bbox=float(np.prod(maxs-mins+1)); d=np.asarray(geo['principal'],float)
         exact=near=0.
@@ -125,8 +136,8 @@ def _component_frame(coords, score, class_name, voxel_size=.5, gt_points=None, m
         vert=float(abs(d[2])); horiz=float(math.sqrt(max(0.,1.-vert*vert)))
         ep=geo['endpoints']
         row=dict(component_id=pid,class_name=class_name,n_voxels=int(len(pts)),
-                 score_mean=float(vals.mean()),score_std=float(vals.std()),score_p10=float(np.quantile(vals,.1)),
-                 score_p50=float(np.quantile(vals,.5)),score_p90=float(np.quantile(vals,.9)),score_max=float(vals.max()),
+                 score_mean=float(vals.mean()),score_std=float(vals.std()),score_p10=float(score_p10),
+                 score_p50=float(score_quantiles[0]),score_p90=float(score_quantiles[1]),score_max=float(vals.max()),
                  vertical_head_mean=vert,horizontal_head_mean=horiz,
                  x_span_ft=float(spans[0]),y_span_ft=float(spans[1]),z_span_ft=float(spans[2]),horizontal_span_ft=float(np.linalg.norm(spans[:2])),
                  bbox_density=float(len(pts)/max(bbox,1.)),center_x=float(pts[:,0].mean()),center_y=float(pts[:,1].mean()),center_z=float(pts[:,2].mean()),

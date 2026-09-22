@@ -38,9 +38,17 @@ def parse_args():
     parser.add_argument("--detailed_cuda_timing", type=int, choices=[0, 1], default=1)
     parser.add_argument("--use_cuda_graph", type=int, choices=[0, 1], default=0)
     parser.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
+    parser.add_argument("--kernel_factory_input_pack", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--groupnorm_input_layout", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--conv_input_layout", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--channels_last_weights", type=int, choices=[0, 1], default=0)
     args = parser.parse_args()
     if args.warmup < 0 or args.iterations < 1:
         parser.error("warmup must be >= 0 and iterations must be >= 1")
+    if args.conv_input_layout and not args.channels_last_weights:
+        parser.error("Conv input fusion requires explicit --channels_last_weights 1")
+    if args.kernel_factory_input_pack and not args.cache_reference_coordinate_channels:
+        parser.error("Kernel Factory packing requires E5b reference coordinate caching")
     if args.cache_coordinate_channels and args.cache_reference_coordinate_channels:
         parser.error("E5 and E5b coordinate caches are mutually exclusive")
     if args.use_cuda_graph and args.detailed_cuda_timing:
@@ -66,6 +74,14 @@ def main():
     item = build_sparse_item_from_dataframe(frame, args.grid_size)
     setup_torch()
     model, cfg, compiled = load_v4_model(args.model_path, "cuda", False, "default")
+    if args.channels_last_weights:
+        model.to(memory_format=torch.channels_last_3d)
+    if args.groupnorm_input_layout:
+        from v4_groupnorm_layout import enable_groupnorm_input_layout
+        enable_groupnorm_input_layout(model)
+    if args.conv_input_layout:
+        from v4_conv_layout import enable_conv_input_layout
+        enable_conv_input_layout(model)
     if compiled:
         raise RuntimeError("production-equivalent profiler unexpectedly compiled the model")
     calibration = load_calibration(args.calibration_json)
@@ -83,6 +99,7 @@ def main():
             cache_coordinate_channels=bool(args.cache_coordinate_channels),
             cache_reference_coordinate_channels=bool(args.cache_reference_coordinate_channels),
             use_cuda_graph=bool(args.use_cuda_graph),
+            kernel_factory_input_pack=bool(args.kernel_factory_input_pack),
         )
 
     for _ in range(args.warmup):
@@ -158,6 +175,10 @@ def main():
             "cache_coordinate_channels": bool(args.cache_coordinate_channels),
             "cache_reference_coordinate_channels": bool(args.cache_reference_coordinate_channels),
             "use_cuda_graph": bool(args.use_cuda_graph),
+            "kernel_factory_input_pack": bool(args.kernel_factory_input_pack),
+            "groupnorm_input_layout": bool(args.groupnorm_input_layout),
+            "conv_input_layout": bool(args.conv_input_layout),
+            "channels_last_weights": bool(args.channels_last_weights),
             "full_model_heads": True,
             "patch_size": int(cfg.get("patch_size", 64)),
             "core_size": 48,
