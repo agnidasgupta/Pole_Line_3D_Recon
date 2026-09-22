@@ -1,8 +1,8 @@
 # Layout migration contract
 
-Branch: `codex/v4-package-layout`. Baseline: `4e45f533021bdbe17a3c9227448e84e7236e15cf`.
+Branch: `harpreet/v4-package-layout`. Baseline: `4e45f533021bdbe17a3c9227448e84e7236e15cf`.
 
-`layout-map.json` records historical paths, new paths, and SHA-256 hashes of original files. `tests/test_layout.py` verifies every mapped computation module under `src/poleline` against those original hashes. No model operations, thresholds, geometry algorithms, or training calculations were changed by this reorganization. Performance experiments remain in the separate performance workspace.
+`layout-map.json` records historical paths, new paths, and SHA-256 hashes of original files. `tests/test_layout.py` verifies every mapped computation module under `src/poleline` against those original hashes, or explicitly recorded current hashes for optimized modules. No model operations, thresholds, geometry algorithms, or training calculations were changed by this reorganization. This describes the original reorganization. The later optimization integration is recorded in `optimization-map.json`: explicitly updated modules use `current_sha256` while preserving the original `sha256`. See [OPTIMIZATION_INTEGRATION.md](OPTIMIZATION_INTEGRATION.md). Generated mocks, benchmarks and profile outputs remain in the separate performance workspace.
 
 ## Compatibility changes
 

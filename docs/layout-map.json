@@ -29,7 +29,9 @@
       "old": "v4/v4_sparse_components.py",
       "new": "src/poleline/stage2/components.py",
       "sha256": "e9a3daadd62ead69d7ac5e17f5907cb2f6f968952bd299904080582c65d89db9",
-      "kind": "python"
+      "kind": "python",
+      "current_sha256": "457e1444cd58cf2de6215da721bcc6f6a4f89bc766b05db9657b1e7abb0758ed",
+      "current_source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
     },
     {
       "old": "v4/v4_stage2_local.py",
@@ -798,7 +800,58 @@
       "old": "ops/v4_stage2_stage1_electrical_v10_opt/v4_stage2_stage1_electrical_tracks_opt.py",
       "new": "src/poleline/stage2/reconstruction.py",
       "kind": "python",
-      "sha256": "2b04b55922461757aaeddf13115910c0fe51ae66c40e25b75d48874e1533dd1e"
+      "sha256": "2b04b55922461757aaeddf13115910c0fe51ae66c40e25b75d48874e1533dd1e",
+      "current_sha256": "f29de1f30298b1aed47c9a1879e0cd9c9912758ccc6941ee293b637fba24441f",
+      "current_source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_conv_layout.py",
+      "new": "src/poleline/stage1/kernels/conv_layout.py",
+      "kind": "python",
+      "sha256": "e02b5f7838fa06200ebb1f3a74c4bbd9d521499532ed4f34f1b94d094a7c6a72",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_core_schedule.py",
+      "new": "src/poleline/stage1/scheduling.py",
+      "kind": "python",
+      "sha256": "96cba8ef16eb923b76e49d138cd8678d761e979758007967366b599f3e9ef9ce",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_groupnorm_layout.py",
+      "new": "src/poleline/stage1/kernels/groupnorm_layout.py",
+      "kind": "python",
+      "sha256": "f434c9cc35528f9e9452e33e518fc6b7c9dad60ad5c274d378ae2db9468ddd53",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_input_pack.py",
+      "new": "src/poleline/stage1/input_pack.py",
+      "kind": "python",
+      "sha256": "ba66eefc5e265c3aac77a37dada900c51ce5bf7a183689282b19f481f62c040e",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_input_prefetch.py",
+      "new": "src/poleline/io/input_prefetch.py",
+      "kind": "python",
+      "sha256": "17e95975a4f79ce15bb9f16a24860f44e3111109cae0c9914a611502917d7b6f",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_kernel_factory_input_copy.py",
+      "new": "src/poleline/stage1/kernels/kernel_factory_input_copy.py",
+      "kind": "python",
+      "sha256": "4ddf256ea444eee0b8e77db0dd6e35d2824ff13d689ff75480228d41cc970664",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
+    },
+    {
+      "old": "v4/v4_output_writer.py",
+      "new": "src/poleline/io/output_writer.py",
+      "kind": "python",
+      "sha256": "a28c47da1ab898a38c270204a3190e75dd1e5302071bc93721fcd488a153a58c",
+      "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991"
     }
   ],
   "container_mounts_updated": [

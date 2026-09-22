@@ -16,7 +16,15 @@ class LayoutTests(unittest.TestCase):
             if move['kind'] != 'python' or not move['new'].startswith('src/'):
                 continue
             data = (ROOT/move['new']).read_bytes()
-            self.assertEqual(hashlib.sha256(data).hexdigest(), move['sha256'], move['new'])
+            self.assertEqual(hashlib.sha256(data).hexdigest(), move.get('current_sha256', move['sha256']), move['new'])
+
+    def test_optimized_source_provenance(self):
+        manifest = json.loads((ROOT/'docs/optimization-map.json').read_text())
+        for entry in manifest['files']:
+            actual = hashlib.sha256((ROOT/entry['destination']).read_bytes()).hexdigest()
+            self.assertEqual(actual, entry['sha256'], entry['destination'])
+            if entry['destination'].endswith('.py'):
+                self.assertEqual(actual, entry['source_sha256'], entry['destination'])
 
     def test_aliases_resolve(self):
         manifest = json.loads((ROOT/'docs/layout-map.json').read_text())
@@ -36,6 +44,22 @@ class LayoutTests(unittest.TestCase):
         for folder in ('scripts', 'experiments', 'legacy', 'v4'):
             for path in (ROOT/folder).rglob('*.sh'):
                 subprocess.run(['bash', '-n', str(path)], check=True, capture_output=True)
+
+    def test_optimization_alias_identity(self):
+        pairs = [
+            ('v4_conv_layout', 'poleline.stage1.kernels.conv_layout'),
+            ('v4_groupnorm_layout', 'poleline.stage1.kernels.groupnorm_layout'),
+            ('v4_core_schedule', 'poleline.stage1.scheduling'),
+            ('v4_input_pack', 'poleline.stage1.input_pack'),
+            ('v4_input_prefetch', 'poleline.io.input_prefetch'),
+            ('v4_output_writer', 'poleline.io.output_writer'),
+        ]
+        for reverse in (False, True):
+            code = f'import sys, importlib; sys.path[:0] = [{str(ROOT/"src")!r}, {str(ROOT/"v4")!r}]\n'
+            for old, canonical in pairs:
+                first, second = (canonical, old) if reverse else (old, canonical)
+                code += f'assert importlib.import_module({first!r}) is importlib.import_module({second!r})\n'
+            subprocess.run([sys.executable, '-c', code], check=True, cwd=ROOT)
 
 
 if __name__ == '__main__':

@@ -102,7 +102,7 @@ class UnionFind:
         return True
 
 
-def connected_components_26(
+def _connected_components_26_scalar(
     coords: np.ndarray,
     line_mask: np.ndarray,
     grid_size: tuple[int, int, int],
@@ -132,6 +132,50 @@ def connected_components_26(
     comps = [np.asarray(v, dtype=np.int64) for v in groups.values()]
     comps.sort(key=lambda a: (-len(a), int(a.min()) if len(a) else -1))
     return line_idx, comps
+
+
+def connected_components_26(
+    coords: np.ndarray,
+    line_mask: np.ndarray,
+    grid_size: tuple[int, int, int],
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Find the same voxel graph with batched integer neighbor lookups."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    c = np.asarray(coords, dtype=np.int32)
+    idx = np.flatnonzero(np.asarray(line_mask, dtype=bool)).astype(np.int64)
+    if len(idx) < 64:
+        return _connected_components_26_scalar(coords, line_mask, grid_size)
+    points = c[idx].astype(np.int64)
+    shape = np.asarray(grid_size, dtype=np.int64)
+    # The scalar function has particular behavior on malformed/duplicate input.
+    # Preserve that behavior rather than silently changing its contract.
+    keys = _coord_keys(points, grid_size)
+    order = np.argsort(keys, kind='stable')
+    sorted_keys = keys[order]
+    if np.any(points < 0) or np.any(points >= shape) or np.any(sorted_keys[1:] == sorted_keys[:-1]):
+        return _connected_components_26_scalar(coords, line_mask, grid_size)
+    sources, targets = [], []
+    for offset in _FORWARD_26:
+        neighbor = points + offset
+        valid = np.all((neighbor >= 0) & (neighbor < shape), axis=1)
+        source = np.flatnonzero(valid)
+        query = _coord_keys(neighbor[valid], grid_size)
+        pos = np.searchsorted(sorted_keys, query)
+        inside = pos < len(sorted_keys)
+        source, query, pos = source[inside], query[inside], pos[inside]
+        hit = sorted_keys[pos] == query
+        sources.append(source[hit]); targets.append(order[pos[hit]])
+    src, dst = np.concatenate(sources), np.concatenate(targets)
+    graph = coo_matrix((np.ones(len(src), dtype=np.uint8), (src, dst)), shape=(len(idx), len(idx))).tocsr()
+    _, labels = connected_components(graph, directed=False, return_labels=True)
+    # Stable ordering reproduces ascending original row indices in each group.
+    grouped = np.argsort(labels, kind='stable')
+    cuts = np.flatnonzero(np.diff(labels[grouped])) + 1
+    comps = [idx[g] for g in np.split(grouped, cuts)]
+    comps.sort(key=lambda a: (-len(a), int(a[0])))
+    return idx, comps
 
 
 def _unit_xy(points: np.ndarray) -> np.ndarray:
@@ -209,9 +253,37 @@ def _segment_voxel_support_fraction(
     samples = max(1, int(math.ceil(length / max(float(sample_step_vox), 1.0e-6))))
     supported = 0
     total = samples + 1
-    for i in range(total):
-        q = pa + (float(i) / float(samples)) * (pb - pa)
-        supported += int(_point_inside_voxel_support(q, support_keys))
+    if total <= 8:
+        for i in range(total):
+            q = pa + (float(i) / float(samples)) * (pb - pa)
+            supported += int(_point_inside_voxel_support(q, support_keys))
+        return float(supported / total), int(supported), int(total)
+    # Keep the reference's FP64 operation order and endpoint-inclusive sampling.
+    # Batch the small array operations, but use the original tuple-set membership
+    # predicate. At tolerance 0.500001 a sample can touch up to eight voxel cells;
+    # nearest-voxel rounding alone would incorrectly reject boundary samples.
+    for start in range(0, total, 4096):
+        t = np.arange(start, min(start + 4096, total), dtype=np.float64) / float(samples)
+        q = pa + t[:, None] * (pb - pa)
+        lo = np.ceil(q - 0.500001).astype(int)
+        hi = np.floor(q + 0.500001).astype(int)
+        hit = np.asarray([tuple(p) in support_keys for p in lo], dtype=bool)
+        # Most samples belong to a single cell. Only a cell-boundary sample
+        # missed by the first lookup needs the other seven possibilities.
+        boundary = (~hit) & np.any(hi > lo, axis=1)
+        if not np.any(boundary):
+            supported += int(np.count_nonzero(hit))
+            continue
+        for dx in (0, 1):
+            for dy in (0, 1):
+                for dz in (0, 1):
+                    if dx == dy == dz == 0:
+                        continue
+                    cell = lo + (dx, dy, dz)
+                    eligible = boundary & (~hit) & np.all(cell <= hi, axis=1)
+                    rows = np.flatnonzero(eligible)
+                    hit[rows] = [tuple(p) in support_keys for p in cell[rows]]
+        supported += int(np.count_nonzero(hit))
     return float(supported / total), int(supported), int(total)
 
 

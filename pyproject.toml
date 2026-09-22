@@ -20,6 +20,8 @@ poleline-stage1 = "poleline.cli.stage1:main"
 poleline-stage2 = "poleline.cli.stage2:main"
 poleline-stage3 = "poleline.cli.stage3:main"
 poleline-session = "poleline.cli.session:main"
+poleline-stage1-opt2 = "poleline.cli.stage1_opt2:main"
+poleline-stage2-electrical = "poleline.cli.stage2_electrical:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

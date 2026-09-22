@@ -1,0 +1,219 @@
+{
+  "source_commit": "46ece117e7f9a2fc9f61bca47782e3166b44d991",
+  "layout_base_commit": "e0a019c8581ad3b1763c02be069554e2a6652e67",
+  "files": [
+    {
+      "source": "H100_OPTIMIZATION_NOTES.md",
+      "destination": "docs/H100_OPTIMIZATION_NOTES.md",
+      "source_sha256": "ea1dc70450068cc31b79a780df51b16c9fb5d5a9ea6942095f140b488bdf6499",
+      "sha256": "ea1dc70450068cc31b79a780df51b16c9fb5d5a9ea6942095f140b488bdf6499",
+      "adaptations": [
+        "Source-summary relative links point through compatibility paths"
+      ]
+    },
+    {
+      "source": "OPTIMIZATION_CHANGE_SUMMARY.md",
+      "destination": "docs/OPTIMIZATION_CHANGE_SUMMARY.md",
+      "source_sha256": "d2b5354edda8c98514977667ade29a3c55b855499f23dcd3fa3e751de5e9fcd4",
+      "sha256": "e0ecac7c772b088216b92a77f8985c1345b37134185fd9538f105942e7db2fe8",
+      "adaptations": [
+        "Source-summary relative links point through compatibility paths"
+      ]
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/E5B_ACCEPTANCE_REPORT.md",
+      "destination": "experiments/v4_stage1_inference_opt2/E5B_ACCEPTANCE_REPORT.md",
+      "source_sha256": "cc1c3e2c56deef822621812d0d9b2e0b228942760337d8179cbb9498bcebe716",
+      "sha256": "cc1c3e2c56deef822621812d0d9b2e0b228942760337d8179cbb9498bcebe716",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/E6_E7_ACCEPTANCE_REPORT.md",
+      "destination": "experiments/v4_stage1_inference_opt2/E6_E7_ACCEPTANCE_REPORT.md",
+      "source_sha256": "8216bbfaf29d7e493ea3357c8ef725e6808053a3f17ce7d0c642ad1ffb42772c",
+      "sha256": "8216bbfaf29d7e493ea3357c8ef725e6808053a3f17ce7d0c642ad1ffb42772c",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/E6_E7_RUNBOOK.md",
+      "destination": "experiments/v4_stage1_inference_opt2/E6_E7_RUNBOOK.md",
+      "source_sha256": "e885097cc4deb2fff72467a94ba710f752a3f694b9006ae29f20e944fe648f59",
+      "sha256": "e885097cc4deb2fff72467a94ba710f752a3f694b9006ae29f20e944fe648f59",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/README.md",
+      "destination": "experiments/v4_stage1_inference_opt2/README.md",
+      "source_sha256": "7aa42a6862e55475e8bb4671441fee0b9ece7ffed872dccb745026da3df49c48",
+      "sha256": "7a9025dde8631ff0325c2bf12441465540eedc2eb0392712d654078777b00cab",
+      "adaptations": [
+        "Documentation link points to docs/"
+      ]
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md",
+      "destination": "experiments/v4_stage1_inference_opt2/V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md",
+      "source_sha256": "4a6fbf6998d5f0edb6c5c1b5c65f97ade11da85bb37dc8702d2f82a708c8081d",
+      "sha256": "4a6fbf6998d5f0edb6c5c1b5c65f97ade11da85bb37dc8702d2f82a708c8081d",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/compare_v4_stage1_opt2_quality.py",
+      "destination": "experiments/v4_stage1_inference_opt2/compare_v4_stage1_opt2_quality.py",
+      "source_sha256": "4a86585632b88b8cbcc9f6359e2e6bea599024de001dbe353d28d3efbb461674",
+      "sha256": "4a86585632b88b8cbcc9f6359e2e6bea599024de001dbe353d28d3efbb461674",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/inventory_v4_stage1_model.py",
+      "destination": "experiments/v4_stage1_inference_opt2/inventory_v4_stage1_model.py",
+      "source_sha256": "45bd3e9641c0a62ab957a00a9bc5c9193b12ca15408a3549964afd1e6c597285",
+      "sha256": "45bd3e9641c0a62ab957a00a9bc5c9193b12ca15408a3549964afd1e6c597285",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/launch_v4_stage1_opt2_experiment.sh",
+      "destination": "experiments/v4_stage1_inference_opt2/launch_v4_stage1_opt2_experiment.sh",
+      "source_sha256": "8644dd3b2ed1f35203941bec0d8cbe76ba76c3ed79058db012a419fe511b536d",
+      "sha256": "8644dd3b2ed1f35203941bec0d8cbe76ba76c3ed79058db012a419fe511b536d",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/monitor_v4_stage1_opt2_experiment.sh",
+      "destination": "experiments/v4_stage1_inference_opt2/monitor_v4_stage1_opt2_experiment.sh",
+      "source_sha256": "a492a3f333d1beae967f8eed00ab9a9a8cdf859b9b43e15c1b5d8f6572d42469",
+      "sha256": "a492a3f333d1beae967f8eed00ab9a9a8cdf859b9b43e15c1b5d8f6572d42469",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/package_v4_stage1_opt2_results.sh",
+      "destination": "experiments/v4_stage1_inference_opt2/package_v4_stage1_opt2_results.sh",
+      "source_sha256": "e191136aaa32d0e355cd20e9d576cef58504560fb62c5592e73c00ed2ace121e",
+      "sha256": "e191136aaa32d0e355cd20e9d576cef58504560fb62c5592e73c00ed2ace121e",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/profile_v4_stage1_opt2.py",
+      "destination": "experiments/v4_stage1_inference_opt2/profile_v4_stage1_opt2.py",
+      "source_sha256": "6466ceb35344ac99dd3322a5b52220944956d190550e1e2b3576b5bbb14ef84a",
+      "sha256": "6466ceb35344ac99dd3322a5b52220944956d190550e1e2b3576b5bbb14ef84a",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/rank_v4_stage1_opt2_variants.py",
+      "destination": "experiments/v4_stage1_inference_opt2/rank_v4_stage1_opt2_variants.py",
+      "source_sha256": "167c83074e75346f2acc67f587693d08e572bbc33b169450ec15f2bf396d92be",
+      "sha256": "167c83074e75346f2acc67f587693d08e572bbc33b169450ec15f2bf396d92be",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/run_v4_stage1_opt2.py",
+      "destination": "experiments/v4_stage1_inference_opt2/run_v4_stage1_opt2.py",
+      "source_sha256": "5fff04612ab962fe8ee31008f4ed31c934ac2dd87e852321e072a4f456939f03",
+      "sha256": "5fff04612ab962fe8ee31008f4ed31c934ac2dd87e852321e072a4f456939f03",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/run_v4_stage1_opt2_experiment.sh",
+      "destination": "experiments/v4_stage1_inference_opt2/run_v4_stage1_opt2_experiment.sh",
+      "source_sha256": "d0b023be11662de6c10fd94a37babdbccb34576c6dd36133c3f8985b453789dd",
+      "sha256": "9df5a2db566f13c1ff8d869f25600f696cb1b3615bd6f508dcdf2294cacc7743",
+      "adaptations": [
+        "Mount full checkout for layout adapters"
+      ]
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/run_v4_stage1_opt2_nsight_profile.sh",
+      "destination": "experiments/v4_stage1_inference_opt2/run_v4_stage1_opt2_nsight_profile.sh",
+      "source_sha256": "a457037d80a216035a593381f75e744ff26d88acd40853053240bb4c01b54233",
+      "sha256": "09faebf1960a40e79f192ac5cf722372e1de6cb58bb11ba1aa41db1659109fbb",
+      "adaptations": [
+        "Mount full checkout for layout adapters"
+      ]
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/self_test_v4_stage1_opt2.py",
+      "destination": "experiments/v4_stage1_inference_opt2/self_test_v4_stage1_opt2.py",
+      "source_sha256": "0fb80181cf1f479c808ecac6ae5af0c7c7a715a65926223dd9bbf5578ec0bd42",
+      "sha256": "0fb80181cf1f479c808ecac6ae5af0c7c7a715a65926223dd9bbf5578ec0bd42",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/summarize_v4_stage1_opt2_timing.py",
+      "destination": "experiments/v4_stage1_inference_opt2/summarize_v4_stage1_opt2_timing.py",
+      "source_sha256": "5108a7cd97d6562765db874ced1f2dbc4318a800cbcba5184554263298724123",
+      "sha256": "5108a7cd97d6562765db874ced1f2dbc4318a800cbcba5184554263298724123",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage1_inference_opt2/v4_realtime_core_opt2.py",
+      "destination": "experiments/v4_stage1_inference_opt2/v4_realtime_core_opt2.py",
+      "source_sha256": "3b64c120888d7cbf3aa77859cb4c8ff20e026ce528c879856f4199162b05ee7f",
+      "sha256": "3b64c120888d7cbf3aa77859cb4c8ff20e026ce528c879856f4199162b05ee7f",
+      "adaptations": []
+    },
+    {
+      "source": "ops/v4_stage2_stage1_electrical_v10_opt/v4_stage2_stage1_electrical_tracks_opt.py",
+      "destination": "src/poleline/stage2/reconstruction.py",
+      "source_sha256": "f29de1f30298b1aed47c9a1879e0cd9c9912758ccc6941ee293b637fba24441f",
+      "sha256": "f29de1f30298b1aed47c9a1879e0cd9c9912758ccc6941ee293b637fba24441f",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_conv_layout.py",
+      "destination": "src/poleline/stage1/kernels/conv_layout.py",
+      "source_sha256": "e02b5f7838fa06200ebb1f3a74c4bbd9d521499532ed4f34f1b94d094a7c6a72",
+      "sha256": "e02b5f7838fa06200ebb1f3a74c4bbd9d521499532ed4f34f1b94d094a7c6a72",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_core_schedule.py",
+      "destination": "src/poleline/stage1/scheduling.py",
+      "source_sha256": "96cba8ef16eb923b76e49d138cd8678d761e979758007967366b599f3e9ef9ce",
+      "sha256": "96cba8ef16eb923b76e49d138cd8678d761e979758007967366b599f3e9ef9ce",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_groupnorm_layout.py",
+      "destination": "src/poleline/stage1/kernels/groupnorm_layout.py",
+      "source_sha256": "f434c9cc35528f9e9452e33e518fc6b7c9dad60ad5c274d378ae2db9468ddd53",
+      "sha256": "f434c9cc35528f9e9452e33e518fc6b7c9dad60ad5c274d378ae2db9468ddd53",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_input_pack.py",
+      "destination": "src/poleline/stage1/input_pack.py",
+      "source_sha256": "ba66eefc5e265c3aac77a37dada900c51ce5bf7a183689282b19f481f62c040e",
+      "sha256": "ba66eefc5e265c3aac77a37dada900c51ce5bf7a183689282b19f481f62c040e",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_input_prefetch.py",
+      "destination": "src/poleline/io/input_prefetch.py",
+      "source_sha256": "17e95975a4f79ce15bb9f16a24860f44e3111109cae0c9914a611502917d7b6f",
+      "sha256": "17e95975a4f79ce15bb9f16a24860f44e3111109cae0c9914a611502917d7b6f",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_kernel_factory_input_copy.py",
+      "destination": "src/poleline/stage1/kernels/kernel_factory_input_copy.py",
+      "source_sha256": "4ddf256ea444eee0b8e77db0dd6e35d2824ff13d689ff75480228d41cc970664",
+      "sha256": "4ddf256ea444eee0b8e77db0dd6e35d2824ff13d689ff75480228d41cc970664",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_output_writer.py",
+      "destination": "src/poleline/io/output_writer.py",
+      "source_sha256": "a28c47da1ab898a38c270204a3190e75dd1e5302071bc93721fcd488a153a58c",
+      "sha256": "a28c47da1ab898a38c270204a3190e75dd1e5302071bc93721fcd488a153a58c",
+      "adaptations": []
+    },
+    {
+      "source": "v4/v4_sparse_components.py",
+      "destination": "src/poleline/stage2/components.py",
+      "source_sha256": "457e1444cd58cf2de6215da721bcc6f6a4f89bc766b05db9657b1e7abb0758ed",
+      "sha256": "457e1444cd58cf2de6215da721bcc6f6a4f89bc766b05db9657b1e7abb0758ed",
+      "adaptations": []
+    }
+  ]
+}

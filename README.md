@@ -1,6 +1,6 @@
 # Pole_Line_3D_Recon
 
-V4 voxel inference and pole/power-line reconstruction. This layout branch is based on `4e45f533021bdbe17a3c9227448e84e7236e15cf` (`v4-stage1-inference-opt2`).
+V4 voxel inference and pole/power-line reconstruction. The original layout migration is based on `4e45f533021bdbe17a3c9227448e84e7236e15cf`; it now incorporates accepted E7 and the runtime optimizations published at `46ece117e7f9a2fc9f61bca47782e3166b44d991`.
 
 ## Layout
 
@@ -25,7 +25,7 @@ artifacts/     # Ignored generated results
 v4/, ops/      # Compatibility entry points for existing commands
 ```
 
-The moved computation files retain their original bytes. Compatibility adapters preserve historical imports, CLI behavior, and location-based file discovery. See [layout details](docs/LAYOUT.md) and [validation results](docs/LAYOUT_VALIDATION.md).
+Unchanged moved computation files retain their original bytes. Optimized implementations match the published optimization source byte for byte, with original and current hashes recorded separately. Compatibility adapters preserve historical imports, CLI behavior, and location-based file discovery. See [layout details](docs/LAYOUT.md) and [validation results](docs/LAYOUT_VALIDATION.md).
 
 ## Use
 
@@ -38,7 +38,7 @@ python v4/run_v4_stage2.py --help
 python v4/run_v4_stage3.py --help
 ```
 
-`poleline-stage1`, `poleline-stage2`, `poleline-stage3`, and `poleline-session` expose those same generic V4 entry points. **The generic Stage 2 command does not select electrical V10.** Continue using the documented [Stage 1 Opt2](experiments/v4_stage1_inference_opt2/README.md) and electrical V10 Opt commands under `ops/v4_stage2_stage1_electrical_v10_opt/` for those experiments. Historical `ops/` paths remain aliases.
+`poleline-stage1`, `poleline-stage2`, `poleline-stage3`, and `poleline-session` expose those same generic V4 entry points. **The generic Stage 2 command does not select electrical V10.** Use `poleline-stage1-opt2` and `poleline-stage2-electrical` for the optimized entry points (or `PYTHONPATH=src python -m poleline.cli.stage1_opt2` / `poleline.cli.stage2_electrical`). See [integration details](docs/OPTIMIZATION_INTEGRATION.md) and the documented [Stage 1 Opt2](experiments/v4_stage1_inference_opt2/README.md) and electrical V10 Opt commands under `ops/v4_stage2_stage1_electrical_v10_opt/` for those experiments. Historical `ops/` paths remain aliases.
 
 Use the original [V4 production guide](v4/README.md) for checkpoint, calibration, runtime, and deployment arguments. Existing defaults are retained. This package currently requires the source checkout; a standalone wheel is not supported.
 
