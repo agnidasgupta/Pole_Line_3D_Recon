@@ -35,8 +35,8 @@ baseline_comparable_total:  379.022 -> 209.723 ms (44.67%, 1.807x)
 | E4 precomputed gather plans | Exact twice; mean 0.37% faster | Rejected as operationally insignificant |
 | E5 coordinate/input cache | Representative exact; full gate drifted after 14 sessions | Rejected |
 | E5b reference coordinate cache | Exact on 3,738 slices / 30 sessions; 1.32% faster in matched gate | Accepted Opt2 candidate |
-| E6 E5b + timing off + safe gather lifetime | Pending | Test only after installing this revision |
-| E7 E6 + CUDA Graph replay | Pending | Test only after E6 exactness passes twice |
+| E6 E5b + timing off + safe gather lifetime | Exact twice | Required safety basis for E7 |
+| E7 E6 + CUDA Graph replay | Exact on 3,738 slices / 30 sessions | Accepted Opt2 candidate |
 
 E5 reduced the two-run representative mean from 121.648 to 119.954 ms, but its
 30-session gate failed on session 15. One production pole score changed by
@@ -116,9 +116,12 @@ Variable-length occupied-row gathering and D2H transfer remain outside the
 graph. E7 is enabled only by `USE_CUDA_GRAPH=1`; no eager fallback is allowed.
 
 Run E6 and E7 strictly in the order documented in
-[`E6_E7_RUNBOOK.md`](E6_E7_RUNBOOK.md). Do not begin asynchronous I/O or the
-in-memory Stage 1 to Stage 2 handoff until one candidate passes the complete
-30-session / 3,738-slice exact saved-output gate.
+[`E6_E7_RUNBOOK.md`](E6_E7_RUNBOOK.md). E7 completed that gate with 30 accepted
+sessions, zero failures and 30 exact production-equivalence reports. See
+[`E6_E7_ACCEPTANCE_REPORT.md`](E6_E7_ACCEPTANCE_REPORT.md) for paired timing,
+full-gate and Nsight Systems evidence. E8 asynchronous I/O and E9 in-memory
+Stage 1 to Stage 2 handoff remain separate experiments; they must preserve all
+existing durable output paths and schemas.
 
 See [`V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md`](V4_STAGE1_INFERENCE_COMPLEXITY_AUDIT.md)
 for model-level and future training-level findings.

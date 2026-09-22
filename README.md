@@ -60,13 +60,16 @@ E5b passed the original failing session, improved matched Stage 1 wall time by
 reproduced saved production outputs exactly across all 3,738 slices in 30
 sessions. See the experiment README and E5b acceptance report for details.
 
-E6 now tests timing removal only together with E3's exact lifetime safeguard.
-E7 is gated on E6 and adds fixed-shape CUDA Graph replay of the unchanged model
-and score-fusion operators. Both remain experiments until exact paired repeats
-and the complete 30-session / 3,738-slice gate pass. Asynchronous read/infer/write
-and the in-memory Stage 1 to Stage 2 handoff are later, separately gated phases;
-all durable output paths and schemas remain unchanged. See the E6/E7 runbook in
-the Opt2 directory.
+E6 removed detailed CUDA-event timing while retaining E3's exact gather-buffer
+lifetime safeguard. E7 adds fixed-shape CUDA Graph replay of the unchanged model
+and score-fusion operators. E7 passed two exact paired E6 comparisons and the
+complete 30-session / 3,738-slice gate: Stage 1 wall time improved from
+282.852 ms to 109.138 ms per slice (61.42%, 2.592x), while baseline-comparable
+total improved from 379.022 ms to 203.350 ms (46.35%, 1.864x). The production
+branch remains unchanged. E8 asynchronous read/infer/write and E9 in-memory
+Stage 1 to Stage 2 handoff are separately gated next phases; all durable output
+paths and schemas remain unchanged. See the Opt2 README and E6/E7 acceptance
+report for the exact contract and profiling evidence.
 
 ## Repository layout
 

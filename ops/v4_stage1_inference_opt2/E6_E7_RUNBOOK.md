@@ -60,6 +60,10 @@ gathering and D2H output transfer remain outside the graph.
 6. Run the faster exact candidate across all 30 sessions / 3,738 slices.
 7. Begin the asynchronous I/O experiment only after the full gate passes.
 
+E6 passed twice, E7 passed twice with verified CUDA Graph capture/replay, and
+E7 then passed the full 30-session / 3,738-slice gate. The documented next
+phase is E8; see [`E6_E7_ACCEPTANCE_REPORT.md`](E6_E7_ACCEPTANCE_REPORT.md).
+
 ## Common Nebius variables
 
 ```bash
