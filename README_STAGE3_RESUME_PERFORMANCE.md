@@ -1,1 +1,0 @@
-docs/archive/README_STAGE3_RESUME_PERFORMANCE.md

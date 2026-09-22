@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/run_v62_inference.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 INPUT_DIR="${INPUT_DIR:-/data/voxel_csv_combined}"; OUTPUT_DIR="${OUTPUT_DIR:-/outputs/poleline_voxel_run_session_groups/v62_three_stage/inference_custom}"; MODEL_PATH="${MODEL_PATH:-/outputs/poleline_voxel_run_session_groups/v62_three_stage/selected/v6_stage1_selected.pt}"; CALIBRATION_JSON="${CALIBRATION_JSON:-/outputs/poleline_voxel_run_session_groups/v62_three_stage/selected/calibration.json}"; LOCAL_REFINER_BUNDLE="${LOCAL_REFINER_BUNDLE:-/outputs/poleline_voxel_run_session_groups/v62_three_stage/stage2_refiner/local_refiner_bundle.joblib}"; MANIFEST_JSON="${MANIFEST_JSON:-}"; GRID_SIZE="${GRID_SIZE:-400 400 200}"
 mkdir -p "$OUTPUT_DIR"; LOG="$OUTPUT_DIR/v62_inference_$(date +%Y%m%d_%H%M%S).log"; exec > >(tee -a "$LOG") 2>&1

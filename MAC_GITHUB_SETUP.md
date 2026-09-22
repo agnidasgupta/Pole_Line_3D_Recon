@@ -1,1 +1,0 @@
-docs/archive/MAC_GITHUB_SETUP.md

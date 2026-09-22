@@ -1,1 +1,0 @@
-docs/archive/SHA256SUMS.txt

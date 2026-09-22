@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/run_v62_stage3.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 
 INFERENCE_DIR="${INFERENCE_DIR:?set INFERENCE_DIR}"

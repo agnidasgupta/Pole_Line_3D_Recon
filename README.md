@@ -1,5 +1,7 @@
 # Pole_Line_3D_Recon
 
+**Clean-root branch: `harpreet/v4-clean-root`.** The optimized Stage 1/Stage 2 code is retained. Old V6.2 entry points are under `legacy/v62/`; historical documents are under `docs/archive/`. Existing branches are unchanged. See [root cleanup and migration notes](docs/ROOT_CLEANUP.md).
+
 V4 voxel inference and pole/power-line reconstruction. The original layout migration is based on `4e45f533021bdbe17a3c9227448e84e7236e15cf`; it now incorporates accepted E7 and the runtime optimizations published at `46ece117e7f9a2fc9f61bca47782e3166b44d991`.
 
 ## Layout

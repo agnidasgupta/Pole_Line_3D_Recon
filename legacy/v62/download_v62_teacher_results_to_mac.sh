@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/download_v62_teacher_results_to_mac.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-nebius-va}"
 REMOTE_RUN="${REMOTE_RUN:-/workspace/voxel_poleline/outputs/poleline_voxel_run_session_groups/v62_teacher_recall/}"

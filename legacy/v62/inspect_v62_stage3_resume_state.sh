@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/inspect_v62_stage3_resume_state.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 RUN="${RUN:-/workspace/voxel_poleline/outputs/poleline_voxel_run_session_groups/v62_teacher_recall}"
 S3="${STAGE3:-$RUN/stage3_reconstruction}"

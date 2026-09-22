@@ -1,1 +1,0 @@
-docs/archive/CODEBASE_MANIFEST.md

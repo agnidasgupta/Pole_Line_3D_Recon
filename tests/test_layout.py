@@ -29,8 +29,16 @@ class LayoutTests(unittest.TestCase):
     def test_aliases_resolve(self):
         manifest = json.loads((ROOT/'docs/layout-map.json').read_text())
         for move in manifest['moves']:
-            self.assertTrue((ROOT/move['old']).exists(), move['old'])
+            if move.get('alias_removed'):
+                self.assertFalse((ROOT/move['old']).exists(), move['old'])
+            else:
+                self.assertTrue((ROOT/move['old']).exists(), move['old'])
             self.assertTrue((ROOT/move['new']).exists(), move['new'])
+
+    def test_root_has_no_legacy_entry_points(self):
+        self.assertFalse(list(ROOT.glob('*.py')))
+        self.assertFalse(list(ROOT.glob('*.sh')))
+        self.assertEqual(sorted(p.name for p in ROOT.glob('*.md')), ['README.md'])
 
     def test_model_module_identity_both_import_orders(self):
         for imports in [

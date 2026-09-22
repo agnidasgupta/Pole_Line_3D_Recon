@@ -1,9 +1,2 @@
-numpy
-pandas
-scipy
-scikit-learn
-joblib
-matplotlib
-tqdm
-pyyaml
-pillow
+# V4 dependencies; historical V6.2 dependencies are in legacy/v62/.
+-r v4/requirements.txt

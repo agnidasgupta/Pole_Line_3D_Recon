@@ -1,0 +1,228 @@
+{
+  "base_commit": "2f4fd6a57bb34aff1bee6e8fcd4bbb6c964eec39",
+  "branch": "harpreet/v4-clean-root",
+  "removed_root_entries": [
+    {
+      "old": "prepare_v62_dataset.py",
+      "replacement": "legacy/v62/prepare_v62_dataset.py"
+    },
+    {
+      "old": "full_scene_evaluate_v6_stage1.py",
+      "replacement": "legacy/v62/full_scene_evaluate_v6_stage1.py"
+    },
+    {
+      "old": "collect_v62_diagnostics.py",
+      "replacement": "legacy/v62/collect_v62_diagnostics.py"
+    },
+    {
+      "old": "time_v62_one_session_inference.py",
+      "replacement": "legacy/v62/time_v62_one_session_inference.py"
+    },
+    {
+      "old": "mine_v62_local_components.py",
+      "replacement": "legacy/v62/mine_v62_local_components.py"
+    },
+    {
+      "old": "v6_predict.py",
+      "replacement": "legacy/v62/v6_predict.py"
+    },
+    {
+      "old": "v6_common.py",
+      "replacement": "legacy/v62/v6_common.py"
+    },
+    {
+      "old": "infer_v62_stage1_stage2.py",
+      "replacement": "legacy/v62/infer_v62_stage1_stage2.py"
+    },
+    {
+      "old": "compare_v4_v62_line_metrics.py",
+      "replacement": "legacy/v62/compare_v4_v62_line_metrics.py"
+    },
+    {
+      "old": "reconstruct_v62_stage3.py",
+      "replacement": "legacy/v62/reconstruct_v62_stage3.py"
+    },
+    {
+      "old": "precision_common.py",
+      "replacement": "legacy/v62/precision_common.py"
+    },
+    {
+      "old": "train_v62_local_refiners.py",
+      "replacement": "legacy/v62/train_v62_local_refiners.py"
+    },
+    {
+      "old": "v6_components.py",
+      "replacement": "legacy/v62/v6_components.py"
+    },
+    {
+      "old": "voxel_common.py",
+      "replacement": "legacy/v62/voxel_common.py"
+    },
+    {
+      "old": "select_v6_candidate.py",
+      "replacement": "legacy/v62/select_v6_candidate.py"
+    },
+    {
+      "old": "train_v6_stage1.py",
+      "replacement": "legacy/v62/train_v6_stage1.py"
+    },
+    {
+      "old": "time_v62_one_session_reconstruction.py",
+      "replacement": "legacy/v62/time_v62_one_session_reconstruction.py"
+    },
+    {
+      "old": "v62_local.py",
+      "replacement": "legacy/v62/v62_local.py"
+    },
+    {
+      "old": "download_v62_results_from_nebius.sh",
+      "replacement": "legacy/v62/download_v62_results_from_nebius.sh"
+    },
+    {
+      "old": "check_v62_teacher_status.sh",
+      "replacement": "legacy/v62/check_v62_teacher_status.sh"
+    },
+    {
+      "old": "run_v62_inference_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_inference_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_teacher_inference.sh",
+      "replacement": "legacy/v62/run_v62_teacher_inference.sh"
+    },
+    {
+      "old": "run_v62_teacher_reconstruction.sh",
+      "replacement": "legacy/v62/run_v62_teacher_reconstruction.sh"
+    },
+    {
+      "old": "run_v62_teacher_training.sh",
+      "replacement": "legacy/v62/run_v62_teacher_training.sh"
+    },
+    {
+      "old": "download_v62_teacher_results_to_mac.sh",
+      "replacement": "legacy/v62/download_v62_teacher_results_to_mac.sh"
+    },
+    {
+      "old": "run_v62_stage3_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_stage3_on_nebius.sh"
+    },
+    {
+      "old": "upload_v62_to_nebius_from_mac.sh",
+      "replacement": "legacy/v62/upload_v62_to_nebius_from_mac.sh"
+    },
+    {
+      "old": "run_v62_one_session_timing_all_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_one_session_timing_all_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_teacher_training_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_teacher_training_on_nebius.sh"
+    },
+    {
+      "old": "inspect_v62_stage3_resume_state.sh",
+      "replacement": "legacy/v62/inspect_v62_stage3_resume_state.sh"
+    },
+    {
+      "old": "check_v62_status.sh",
+      "replacement": "legacy/v62/check_v62_status.sh"
+    },
+    {
+      "old": "run_v62_one_session_inference_timed_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_one_session_inference_timed_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_teacher_all.sh",
+      "replacement": "legacy/v62/run_v62_teacher_all.sh"
+    },
+    {
+      "old": "run_v62_stage3.sh",
+      "replacement": "legacy/v62/run_v62_stage3.sh"
+    },
+    {
+      "old": "run_v62_teacher_all_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_teacher_all_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_teacher_inference_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_teacher_inference_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_teacher_reconstruction_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_teacher_reconstruction_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_training.sh",
+      "replacement": "legacy/v62/run_v62_training.sh"
+    },
+    {
+      "old": "run_v62_one_session_reconstruction_timed_on_nebius.sh",
+      "replacement": "legacy/v62/run_v62_one_session_reconstruction_timed_on_nebius.sh"
+    },
+    {
+      "old": "run_v62_inference.sh",
+      "replacement": "legacy/v62/run_v62_inference.sh"
+    },
+    {
+      "old": "README_RUNTIME_HARDENING.md",
+      "replacement": "docs/archive/README_RUNTIME_HARDENING.md"
+    },
+    {
+      "old": "CODEBASE_MANIFEST.md",
+      "replacement": "docs/archive/CODEBASE_MANIFEST.md"
+    },
+    {
+      "old": "MAC_GITHUB_SETUP.md",
+      "replacement": "docs/archive/MAC_GITHUB_SETUP.md"
+    },
+    {
+      "old": "README_SESSION_TIMING.md",
+      "replacement": "docs/archive/README_SESSION_TIMING.md"
+    },
+    {
+      "old": "V10_FINAL_EXPERIMENTAL_RUNBOOK.md",
+      "replacement": "docs/archive/V10_FINAL_EXPERIMENTAL_RUNBOOK.md"
+    },
+    {
+      "old": "FINAL_SOURCE_SHA256SUMS.txt",
+      "replacement": "docs/archive/FINAL_SOURCE_SHA256SUMS.txt"
+    },
+    {
+      "old": "README_STAGE3_RESUME_PERFORMANCE.md",
+      "replacement": "docs/archive/README_STAGE3_RESUME_PERFORMANCE.md"
+    },
+    {
+      "old": "README_TEACHER_RECALL_PIPELINE.md",
+      "replacement": "docs/archive/README_TEACHER_RECALL_PIPELINE.md"
+    },
+    {
+      "old": "V4_V62_LINE_RECALL_ANALYSIS.md",
+      "replacement": "docs/archive/V4_V62_LINE_RECALL_ANALYSIS.md"
+    },
+    {
+      "old": "BUILD_FIX_README.md",
+      "replacement": "docs/archive/BUILD_FIX_README.md"
+    },
+    {
+      "old": "SHA256SUMS.txt",
+      "replacement": "docs/archive/SHA256SUMS.txt"
+    },
+    {
+      "old": "README_CIRCUIT_COMPLETE_RECONSTRUCTION.md",
+      "replacement": "docs/archive/README_CIRCUIT_COMPLETE_RECONSTRUCTION.md"
+    },
+    {
+      "old": "Dockerfile",
+      "replacement": "legacy/v62/Dockerfile",
+      "note": "Use docker/Dockerfile.v4_realtime for V4"
+    },
+    {
+      "old": "requirements.txt",
+      "replacement": "legacy/v62/requirements.txt",
+      "note": "Root requirements now selects V4"
+    }
+  ]
+}

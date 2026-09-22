@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# Compatibility launcher; implementation: legacy/v62/run_v62_teacher_training.sh
-_poleline_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/legacy/v62/run_v62_teacher_training.sh"
-if [[ ! -f "$_poleline_script" ]]; then
-  _poleline_script="/workspace/poleline_repo/legacy/v62/run_v62_teacher_training.sh"
-fi
-source "$_poleline_script"

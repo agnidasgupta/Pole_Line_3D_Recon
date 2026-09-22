@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/upload_v62_to_nebius_from_mac.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 HOST="${HOST:-nebius-va}"
 REMOTE_PARENT="${REMOTE_PARENT:-/workspace/voxel_poleline}"

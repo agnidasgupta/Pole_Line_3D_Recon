@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-POLELINE_LEGACY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/run_v62_teacher_all.sh"
+POLELINE_LEGACY_SOURCE="${BASH_SOURCE[0]}"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 set -euo pipefail
 WORK_DIR="${WORK_DIR:-/outputs/poleline_voxel_run_session_groups}"
 V62_DIR="${V62_DIR:-$WORK_DIR/v62_teacher_recall}"
