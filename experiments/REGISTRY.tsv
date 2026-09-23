@@ -1,0 +1,20 @@
+experiment_id	source_ref	source_commit	merge_base	head_author
+harpreet_v4_h100_opt	harpreet/v4-h100-opt	46ece117e7f9a2fc9f61bca47782e3166b44d991	89fd10b45b43cb74f7c873805f1e431677507113	Harpreet Sethi <hasethi@nvidia.com>
+v4_recon_quality_enhancements	v4-recon-quality-enhancements	85bbdc1d39640bc0a8e5d7c8df061f13e9ce9b25	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_recon_v62_geometry	v4-recon-v62-geometry	89fd10b45b43cb74f7c873805f1e431677507113	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage1_inference_opt1	v4-stage1-inference-opt1	cc69fa86e24df7dcc3dac87ec12b0e59a9b7acb5	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage1_inference_opt2	v4-stage1-inference-opt2	fe11d435c2054650701bbe78c74675011278ccf3	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage12_unity_native_v10	v4-stage12-unity-native-v10	9ecd84213fbba25f863931cb1920d63f97306c0a	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_bundle_consensus_v7	v4-stage2-bundle-consensus-v7	7d5db91d4f80325d3df318dd49975f0aec5f2381	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_bundle_consensus_v7_diagnostics	v4-stage2-bundle-consensus-v7-diagnostics	b6470b3f6472f65c4f0c6f366a344a96a5707fe9	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_gt_autoselect_v3	v4-stage2-gt-autoselect-v3	72a3c67c889bcd959fe495590a39d5209045d503	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_native_line_recall_v2	v4-stage2-native-line-recall-v2	a2b8ce972de860a8bd30f03b10eb2e0aa75e72d5	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_recall_stage3_quality_v1	v4-stage2-recall-stage3-quality-v1	dfb15c0cf8ee6532663f6e6cce0736bd88f2ad05	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_residual_union_v6	v4-stage2-residual-union-v6	8f9692f9b55722b59e1f6b47e55af3d3922f16ad	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_stage1_electrical_v10	v4-stage2-stage1-electrical-v10	b08257497d01550fa5badfab88fe8ec5796983b3	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_stage1_electrical_v10_opt1	v4-stage2-stage1-electrical-v10-opt1	a42d8e83261533c0b21a2b4af3105fdadc0dc2a4	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_stage1_exact_v8	v4-stage2-stage1-exact-v8	abd3fede4f4416122a963f8f20e272771f3b01b2	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_stage1_label_preservation_v5	v4-stage2-stage1-label-preservation-v5	10aec4e35a57dce937dbc3b546ee14188c1f9624	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage2_stage1_track_join_v9	v4-stage2-stage1-track-join-v9	0a89d1ead888037dd180baec3670b7d8eb021b04	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage3_incremental	v4-stage3-incremental	0b4b7f7c5ee1a06556945ea963f0c0c9be6d6958	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>
+v4_stage3_incremental_chain	v4-stage3-incremental-chain	0b4b7f7c5ee1a06556945ea963f0c0c9be6d6958	89fd10b45b43cb74f7c873805f1e431677507113	Agni D <agni@Agnis-MacBook-Pro.local>

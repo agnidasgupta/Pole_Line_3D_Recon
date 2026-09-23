@@ -74,3 +74,7 @@ git diff --cached --name-only | grep -E '(^|/)(__pycache__|\.DS_Store|\._)' || t
 ```
 
 Generated data/model artifacts and macOS metadata should not be committed.
+
+## V4 clean-maintenance layout
+
+This history-preserving branch adds a clean development and experiment structure without changing accepted V4 entry points. See [clean-layout policy](docs/REPOSITORY_LAYOUT.md), [experiment registry](experiments/REGISTRY.tsv), and [maintenance overview](CLEAN_LAYOUT_README.md).
