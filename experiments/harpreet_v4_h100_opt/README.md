@@ -14,3 +14,7 @@ bash ops/experiments/fetch_experiment_worktree.sh /path/to/repo harpreet_v4_h100
 ```
 
 The original H100 source is fetched through the registry; it is not merged into production paths.
+
+## Recorded result
+
+See [RESULTS.md](RESULTS.md) for the recorded validation status and key outcome.

@@ -12,3 +12,7 @@ Materialize it with:
 ```bash
 bash ops/experiments/fetch_experiment_worktree.sh /path/to/repo v4_stage2_stage1_label_preservation_v5 /path/to/worktree
 ```
+
+## Recorded result
+
+See [RESULTS.md](RESULTS.md) for the recorded validation status and key outcome.

@@ -78,3 +78,8 @@ Generated data/model artifacts and macOS metadata should not be committed.
 ## V4 clean-maintenance layout
 
 This history-preserving branch adds a clean development and experiment structure without changing accepted V4 entry points. See [clean-layout policy](docs/REPOSITORY_LAYOUT.md), [experiment registry](experiments/REGISTRY.tsv), and [maintenance overview](CLEAN_LAYOUT_README.md).
+
+## Clean-layout experiment results
+
+The readable V4 experiment index is [experiments/RESULTS.md](experiments/RESULTS.md).
+Each archived experiment has a local RESULTS.md; runnable source provenance remains in experiments/REGISTRY.tsv.
