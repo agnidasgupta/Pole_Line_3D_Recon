@@ -1,0 +1,9 @@
+Stage1-Exact V8 static/synthetic test plan:
+- 26-neighbour edge builder emits each undirected adjacent pair once.
+- Two poles with no Stage1 line labels between them generate no line edge.
+- Diagonal Stage1 line voxels connect only when voxel-adjacent.
+- Isolated Stage1 line voxel is preserved in voxel audit but cannot create a fake span.
+- Exact voxel preservation invariant is 1.0.
+- Synthetic line voxel count is 0.
+- Runtime GT usage is false.
+- Pole-pair inference is false.

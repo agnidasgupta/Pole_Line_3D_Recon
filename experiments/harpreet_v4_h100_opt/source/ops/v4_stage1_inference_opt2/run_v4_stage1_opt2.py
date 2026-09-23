@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""Isolated V4 Stage-1 execution experiment with unchanged production inference."""
+from __future__ import annotations
+
+import argparse
+from contextlib import closing, nullcontext
+import csv
+import time
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from pandas.errors import EmptyDataError
+
+from run_v4_realtime_session import discover
+from v4_realtime_core import (
+    build_sparse_item_from_dataframe,
+    extract_center_metadata,
+    load_calibration,
+    load_v4_model,
+    setup_torch,
+)
+from v4_stage_contracts import (
+    CONTRACT_VERSION,
+    STAGE1_MANIFEST_COLUMNS,
+    atomic_json,
+    load_stage1_artifact,
+    safe_id,
+    save_stage1_artifact,
+    stage1_paths,
+    upsert_manifest_row,
+)
+from v4_realtime_core_opt2 import V4SparseGpuWorkspace, predict_v4_sparse_rows_opt, prepare_e7_schedule
+
+
+TIMING_COLUMNS = [
+    "group_id", "slice_seq", "relative_path", "rows", "occupied_rows",
+    "csv_read_ms", "sparse_item_prep_ms", "core_schedule_ms",
+    "workspace_prepare_ms", "gpu_workspace_reset_ms", "host_pin_ms",
+    "sparse_h2d_cuda_ms", "gpu_sparse_scatter_ms", "gpu_patch_extract_ms",
+    "gpu_feature_assembly_ms", "gpu_model_ms", "gpu_gather_plan_ms",
+    "gpu_gather_ms", "d2h_gather_ms", "stage1_wall_ms",
+    "stage1_artifact_write_ms", "stage1_manifest_write_ms", "slice_total_ms",
+    "active_cores", "total_possible_cores", "batches", "workspace_reused",
+    "host_output_reused", "pinned_d2h", "gpu_volume_mode", "fixed_batch_shape",
+    "batch_size", "channels_last", "compile_model", "compile_mode",
+    "prune_embedding_head", "detailed_cuda_timing", "optimization_version",
+    "retain_gather_host_buffers", "precompute_batch_gather_plans",
+    "cache_coordinate_channels", "cache_reference_coordinate_channels",
+    "coordinate_cache_hits", "coordinate_cache_misses",
+    "reference_coordinate_batch_cache_hit", "model_input_reused",
+    "use_cuda_graph", "cuda_graph_captured", "cuda_graph_capture_ms",
+    "cuda_graph_replays",
+]
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--input_dir", required=True)
+    p.add_argument("--session_filter", required=True)
+    p.add_argument("--output_dir", required=True)
+    p.add_argument("--model_path", required=True)
+    p.add_argument("--calibration_json", required=True)
+    p.add_argument("--timing_csv", required=True)
+    p.add_argument("--progress_json", required=True)
+    p.add_argument("--grid_size", type=int, nargs=3, default=[400, 400, 200])
+    p.add_argument("--core_size", type=int, default=48)
+    p.add_argument("--batch_size", type=int, choices=[12], default=12)
+    p.add_argument("--amp", choices=["bf16"], default="bf16")
+    p.add_argument("--compile_model", type=int, choices=[0], default=0)
+    p.add_argument(
+        "--compile_mode",
+        choices=["default", "reduce-overhead", "max-autotune"],
+        default="reduce-overhead",
+    )
+    p.add_argument("--channels_last", type=int, choices=[1], default=1)
+    p.add_argument("--pinned_d2h", type=int, choices=[0, 1], default=0)
+    p.add_argument("--detailed_cuda_timing", type=int, choices=[0, 1], default=1)
+    p.add_argument("--retain_gather_host_buffers", type=int, choices=[0, 1], default=0)
+    p.add_argument("--precompute_batch_gather_plans", type=int, choices=[0, 1], default=0)
+    p.add_argument("--cache_coordinate_channels", type=int, choices=[0, 1], default=0)
+    p.add_argument("--cache_reference_coordinate_channels", type=int, choices=[0, 1], default=0)
+    p.add_argument("--use_cuda_graph", type=int, choices=[0, 1], default=0)
+    p.add_argument("--prune_embedding_head", type=int, choices=[0], default=0)
+    p.add_argument("--warmup_iterations", type=int, choices=[0], default=0)
+    p.add_argument("--evaluate_all_cores", type=int, choices=[0], default=0)
+    p.add_argument("--gpu_coord_channels", type=int, choices=[1], default=1)
+    p.add_argument("--fixed_batch_shape", type=int, choices=[1], default=1)
+    p.add_argument("--resume", type=int, choices=[0, 1], default=1)
+    p.add_argument("--max_slices", type=int, default=0)
+    p.add_argument("--prefetch_inputs", type=int, choices=[0, 1], default=0,
+                   help="Read and prepare future slices on bounded CPU workers")
+    p.add_argument("--prepare_core_schedule", type=int, choices=[0, 1], default=0,
+                   help="Build the unchanged E7 core schedule on the input worker")
+    p.add_argument("--prefetch_depth", type=int, choices=range(1, 5), default=1)
+    p.add_argument("--prefetch_workers", type=int, choices=[1, 2], default=1)
+    p.add_argument("--async_output_writes", type=int, choices=[0, 1], default=0,
+                   help="Overlap one ordered durable output write with next inference")
+    p.add_argument("--kernel_factory_input_pack", type=int, choices=[0, 1], default=0,
+                   help="Experimental fresh-buffer packing using E5b arithmetic")
+    p.add_argument("--groupnorm_input_layout", type=int, choices=[0, 1], default=0)
+    p.add_argument("--conv_input_layout", type=int, choices=[0, 1], default=0)
+    p.add_argument("--channels_last_weights", type=int, choices=[0, 1], default=0)
+    a = p.parse_args()
+    if a.prepare_core_schedule and not a.prefetch_inputs:
+        p.error("prepare_core_schedule requires --prefetch_inputs 1")
+    if a.prefetch_workers > a.prefetch_depth:
+        p.error("prefetch_workers must not exceed prefetch_depth")
+    if a.conv_input_layout and not a.channels_last_weights:
+        p.error("Conv input fusion requires explicit --channels_last_weights 1")
+    if a.kernel_factory_input_pack and not a.cache_reference_coordinate_channels:
+        p.error("Kernel Factory packing requires --cache_reference_coordinate_channels 1")
+    if a.cache_coordinate_channels and a.cache_reference_coordinate_channels:
+        p.error("E5 and E5b coordinate caches are mutually exclusive")
+    if a.use_cuda_graph and a.detailed_cuda_timing:
+        p.error("E7 CUDA Graph replay requires --detailed_cuda_timing 0")
+    if not a.detailed_cuda_timing and not a.retain_gather_host_buffers:
+        p.error("timing-disabled E6/E7 requires --retain_gather_host_buffers 1")
+    if not a.detailed_cuda_timing and not a.cache_reference_coordinate_channels:
+        p.error("E6/E7 builds only on accepted E5b reference coordinate caching")
+    return a
+
+
+def prepare_model_for_experiment(a):
+    model, cfg, compiled = load_v4_model(a.model_path, "cuda", False, "default")
+    if a.channels_last_weights:
+        import torch
+        model.to(memory_format=torch.channels_last_3d)
+    if a.groupnorm_input_layout:
+        from v4_groupnorm_layout import enable_groupnorm_input_layout
+        enable_groupnorm_input_layout(model)
+    if a.conv_input_layout:
+        from v4_conv_layout import enable_conv_input_layout
+        enable_conv_input_layout(model)
+    if compiled:
+        raise RuntimeError("production-preserving experiment unexpectedly compiled the model")
+    return model, cfg, False, 0.0
+
+
+def completed_manifest_keys(path: Path):
+    if not path.is_file() or not path.stat().st_size:
+        return set()
+    try:
+        frame = pd.read_csv(path)
+    except EmptyDataError:
+        return set()
+    if not {"group_id", "slice_seq", "status"}.issubset(frame.columns):
+        return set()
+    frame = frame[frame.status.astype(str).eq("completed")]
+    return {(str(row.group_id), int(row.slice_seq)) for row in frame.itertuples(index=False)}
+
+
+def append_timing(path: Path, row: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    exists = path.is_file() and path.stat().st_size > 0
+    with path.open("a", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=TIMING_COLUMNS, extrasaction="ignore")
+        if not exists:
+            writer.writeheader()
+        writer.writerow({name: row.get(name, "") for name in TIMING_COLUMNS})
+        stream.flush()
+
+
+def manifest_row(a, geo, sess, sid, seq, src, rel, npz, meta_path, center, rows, occupied):
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "id": sid,
+        "source": str(src),
+        "relative_path": rel,
+        "geography": geo,
+        "session": sess,
+        "slice_seq": seq,
+        "group_id": a.session_filter,
+        **center,
+        "stage1_npz": str(npz),
+        "stage1_meta_json": str(meta_path),
+        "rows": int(rows),
+        "occupied_rows": int(occupied),
+        "status": "completed",
+    }
+
+
+def main():
+    a = parse_args()
+    input_root = Path(a.input_dir).resolve()
+    output_root = Path(a.output_dir).resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    rows = discover(input_root, a.session_filter)
+    if a.max_slices > 0:
+        rows = rows[:a.max_slices]
+    geo, sess = a.session_filter.split("/", 1)
+    manifest_path = output_root / "stage1_manifest.csv"
+    done = completed_manifest_keys(manifest_path)
+
+    setup_torch()
+    model, cfg, compiled, warmup_ms = prepare_model_for_experiment(a)
+    print(
+        f"[stage1-opt2] model_ready compiled={compiled} batch={a.batch_size} "
+        f"channels_last={a.channels_last} pinned_d2h={a.pinned_d2h} "
+        f"detailed_cuda_timing={a.detailed_cuda_timing} "
+        f"retain_gather_host_buffers={a.retain_gather_host_buffers} "
+        f"precompute_batch_gather_plans={a.precompute_batch_gather_plans} "
+        f"cache_coordinate_channels={a.cache_coordinate_channels} "
+        f"cache_reference_coordinate_channels={a.cache_reference_coordinate_channels} "
+        f"use_cuda_graph={a.use_cuda_graph} "
+        f"prune_embedding={a.prune_embedding_head} warmup_ms={warmup_ms:.1f}",
+        flush=True,
+    )
+    calibration = load_calibration(a.calibration_json)
+    workspace = V4SparseGpuWorkspace()
+
+    from v4_input_prefetch import iter_prefetched, load_stage1_input, _range
+    from v4_output_writer import OrderedOutputWriter, snapshot_stage1_output
+
+    def finish_output(npz, meta_path, item, pred, metadata, row, timing_row, slice_t0, index):
+        t0 = time.perf_counter()
+        with _range("output/artifact_write_fsync"):
+            save_stage1_artifact(npz, meta_path, item, pred, metadata)
+        artifact_write_ms = (time.perf_counter() - t0) * 1000.0
+        t0 = time.perf_counter()
+        with _range("output/manifest_write"):
+            upsert_manifest_row(manifest_path, row, STAGE1_MANIFEST_COLUMNS)
+        manifest_write_ms = (time.perf_counter() - t0) * 1000.0
+        timing_row.update(stage1_artifact_write_ms=artifact_write_ms,
+                          stage1_manifest_write_ms=manifest_write_ms,
+                          slice_total_ms=(time.perf_counter() - slice_t0) * 1000.0)
+        append_timing(Path(a.timing_csv), timing_row)
+        print(
+            f"[stage1-opt2] {index}/{len(rows)} seq={row['slice_seq']} occupied={len(item['coords'])} "
+            f"infer={timing_row['stage1_wall_ms']:.1f}ms write={artifact_write_ms:.1f}ms "
+            f"workspace_reused={timing_row.get('workspace_reused', 0)}",
+            flush=True,
+        )
+        return a.session_filter, row['slice_seq']
+
+    def drain_output(writer):
+        with _range("output/backpressure"):
+            completed = writer.drain()
+        if completed is not None:
+            done.add(completed)
+
+    def load_pending(row):
+        _, src, rel = row
+        npz, meta = stage1_paths(output_root, rel)
+        if a.resume and npz.is_file() and meta.is_file():
+            return None  # Preserve reuse/manifest-repair behavior without reading input.
+        loaded = load_stage1_input(src, a.grid_size)
+        if a.prepare_core_schedule:
+            loaded.schedule = prepare_e7_schedule(loaded.item['coords'], a.grid_size, a.core_size,
+                                                  a.batch_size, precompute_batch_gather_plans=bool(a.precompute_batch_gather_plans))
+        return loaded
+    inputs = (iter_prefetched(rows, load_pending, depth=a.prefetch_depth, workers=a.prefetch_workers) if a.prefetch_inputs
+              else ((row, None, 0.0) for row in rows))
+    with closing(inputs), (OrderedOutputWriter() if a.async_output_writes else nullcontext()) as output_writer:
+        for index, ((seq, src, rel), prepared_input, input_wait_ms) in enumerate(inputs, 1):
+            slice_t0 = time.perf_counter() - input_wait_ms / 1000.0
+            sid = safe_id(rel.replace("/", "__"))
+            npz, meta_path = stage1_paths(output_root, rel)
+            progress = {
+                "state": "running",
+                "group_id": a.session_filter,
+                "slice_index": index,
+                "slice_count": len(rows),
+                "slice_seq": int(seq),
+                "relative_path": rel,
+                "updated_unix": time.time(),
+            }
+            atomic_json(progress, a.progress_json)
+
+            # Manifest repair must never race the ordered writer's replacement.
+            if output_writer is not None and a.resume and npz.is_file() and meta_path.is_file():
+                drain_output(output_writer)
+
+            if a.resume and (a.session_filter, seq) in done and npz.is_file() and meta_path.is_file():
+                print(f"[stage1-opt2] {index}/{len(rows)} reuse seq={seq} artifact={npz}", flush=True)
+                continue
+
+            if a.resume and npz.is_file() and meta_path.is_file():
+                _, _, prior_meta = load_stage1_artifact(npz, meta_path)
+                center = dict(prior_meta.get("center_metadata", {}))
+                row = manifest_row(
+                    a, geo, sess, str(prior_meta.get("id", sid)), seq,
+                    prior_meta.get("source", src), rel, npz, meta_path, center,
+                    prior_meta.get("rows", 0), prior_meta.get("occupied_rows", 0),
+                )
+                upsert_manifest_row(manifest_path, row, STAGE1_MANIFEST_COLUMNS)
+                done.add((a.session_filter, seq))
+                print(f"[stage1-opt2] {index}/{len(rows)} repaired_manifest seq={seq}", flush=True)
+                continue
+
+            if prepared_input is not None:
+                frame, item = prepared_input.frame, prepared_input.item
+                read_ms, prep_ms = prepared_input.read_ms, prepared_input.prepare_ms
+            else:
+                t0 = time.perf_counter()
+                frame = pd.read_csv(src)
+                read_ms = (time.perf_counter() - t0) * 1000.0
+                t0 = time.perf_counter()
+                item = build_sparse_item_from_dataframe(frame, a.grid_size)
+                prep_ms = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            pred = predict_v4_sparse_rows_opt(
+                item,
+                model,
+                cfg,
+                calibration,
+                a.grid_size,
+                a.core_size,
+                a.batch_size,
+                a.amp,
+                channels_last=bool(a.channels_last),
+                evaluate_all_cores=False,
+                gpu_coord_channels=True,
+                fixed_batch_shape=True,
+                workspace=workspace,
+                pinned_d2h=bool(a.pinned_d2h),
+                require_compiled=bool(a.compile_model),
+                detailed_cuda_timing=bool(a.detailed_cuda_timing),
+                retain_gather_host_buffers=bool(a.retain_gather_host_buffers),
+                precompute_batch_gather_plans=bool(a.precompute_batch_gather_plans),
+                cache_coordinate_channels=bool(a.cache_coordinate_channels),
+                cache_reference_coordinate_channels=bool(a.cache_reference_coordinate_channels),
+                use_cuda_graph=bool(a.use_cuda_graph),
+                kernel_factory_input_pack=bool(a.kernel_factory_input_pack),
+                prepared_schedule=prepared_input.schedule if prepared_input is not None else None,
+            )
+            infer_ms = (time.perf_counter() - t0) * 1000.0
+            center = extract_center_metadata(frame)
+            timing = {
+                "csv_read_ms": read_ms,
+                "sparse_item_prep_ms": prep_ms,
+                "stage1_wall_ms": infer_ms,
+                **pred["timing"],
+            }
+            metadata = {
+                "id": sid,
+                "source": str(src),
+                "relative_path": rel,
+                "geography": geo,
+                "session": sess,
+                "slice_seq": seq,
+                "group_id": a.session_filter,
+                "rows": len(frame),
+                "occupied_rows": len(item["coords"]),
+                "center_metadata": center,
+                "timing": timing,
+                "prefetch_inputs": bool(a.prefetch_inputs),
+                "prepare_core_schedule": bool(a.prepare_core_schedule),
+                "prefetch_depth": a.prefetch_depth,
+                "prefetch_workers": a.prefetch_workers,
+                "async_output_writes": bool(a.async_output_writes),
+                "input_wait_ms": input_wait_ms,
+                "kernel_factory_input_pack": bool(a.kernel_factory_input_pack),
+                "groupnorm_input_layout": bool(a.groupnorm_input_layout),
+                "conv_input_layout": bool(a.conv_input_layout),
+                "channels_last_weights": bool(a.channels_last_weights),
+                "model_path": str(a.model_path),
+                "calibration_json": str(a.calibration_json),
+                "compiled": compiled,
+                "batch_size": int(a.batch_size),
+                "channels_last": bool(a.channels_last),
+                "compile_mode": a.compile_mode if a.compile_model else "disabled",
+                "pinned_d2h": bool(a.pinned_d2h),
+                "detailed_cuda_timing": bool(a.detailed_cuda_timing),
+                "retain_gather_host_buffers": bool(a.retain_gather_host_buffers),
+                "precompute_batch_gather_plans": bool(a.precompute_batch_gather_plans),
+                "cache_coordinate_channels": bool(a.cache_coordinate_channels),
+                "cache_reference_coordinate_channels": bool(a.cache_reference_coordinate_channels),
+                "use_cuda_graph": bool(a.use_cuda_graph),
+                "prune_embedding_head": bool(a.prune_embedding_head),
+                "warmup_iterations": int(a.warmup_iterations),
+                "model_warmup_ms": float(warmup_ms),
+                "evaluate_all_cores": False,
+                "gpu_coord_channels": True,
+                "fixed_batch_shape": True,
+                "amp": a.amp,
+            }
+
+            row = manifest_row(
+                a, geo, sess, sid, seq, src, rel, npz, meta_path, center,
+                len(frame), len(item["coords"]),
+            )
+            timing_row = {
+                "group_id": a.session_filter,
+                "slice_seq": seq,
+                "relative_path": rel,
+                "rows": len(frame),
+                "occupied_rows": len(item["coords"]),
+                **timing,
+                "batch_size": int(a.batch_size),
+                "channels_last": int(a.channels_last),
+                "compile_model": int(a.compile_model),
+                "compile_mode": a.compile_mode if a.compile_model else "disabled",
+                "prune_embedding_head": int(a.prune_embedding_head),
+                "detailed_cuda_timing": int(a.detailed_cuda_timing),
+                "retain_gather_host_buffers": int(a.retain_gather_host_buffers),
+                "precompute_batch_gather_plans": int(a.precompute_batch_gather_plans),
+                "cache_coordinate_channels": int(a.cache_coordinate_channels),
+                "cache_reference_coordinate_channels": int(a.cache_reference_coordinate_channels),
+                "use_cuda_graph": int(a.use_cuda_graph),
+            }
+            if output_writer is None:
+                done.add(finish_output(npz, meta_path, item, pred, metadata, row, timing_row, slice_t0, index))
+            else:
+                drain_output(output_writer)
+                with _range("output/snapshot"):
+                    saved_item, saved_pred, saved_metadata = snapshot_stage1_output(item, pred, metadata)
+                output_writer.submit(finish_output, npz, meta_path, saved_item, saved_pred,
+                                     saved_metadata, row, timing_row, slice_t0, index)
+                del saved_item, saved_pred, saved_metadata
+        if output_writer is not None:
+            with _range("output/final_drain"):
+                drain_output(output_writer)
+    atomic_json(
+        {
+            "completed": True,
+            "contract_version": CONTRACT_VERSION,
+            "stage": 1,
+            "group_id": a.session_filter,
+            "slices": len(rows),
+            "manifest": str(manifest_path),
+        },
+        output_root / "STAGE1_COMPLETED.json",
+    )
+    atomic_json(
+        {
+            "state": "completed",
+            "group_id": a.session_filter,
+            "slice_count": len(rows),
+            "updated_unix": time.time(),
+        },
+        a.progress_json,
+    )
+    print("V4_STAGE1_OPT2_SESSION_OK", flush=True)
+
+
+if __name__ == "__main__":
+    main()

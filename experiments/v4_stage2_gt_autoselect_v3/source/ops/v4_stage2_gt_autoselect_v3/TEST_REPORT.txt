@@ -1,0 +1,13 @@
+Validation performed in the authoring environment:
+- Python syntax compile: PASS for all Python files.
+- Bash syntax validation: PASS for all shell files.
+- Selector self-test for parallel-lane and pole-bracketing logic: PASS.
+- End-to-end synthetic labeled Stage1 session test: PASS.
+  * Baseline missed one of two parallel GT line lanes.
+  * Selector evaluated 44 candidate/refiner profiles.
+  * It selected a safe profile that recovered 72/72 baseline-missed target voxels.
+  * Target and guardrail near precision remained 1.0.
+- Derived Stage2 bundle creation/load verification: PASS.
+
+Real Nebius data and the accepted joblib bundle must still be validated by the
+runner's container preflight and GT selection gate.

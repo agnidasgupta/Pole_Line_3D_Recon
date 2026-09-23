@@ -1,0 +1,8 @@
+Static validation performed before packaging:
+- all Python files compile with py_compile
+- all shell scripts pass bash -n
+- selector version/name consistency checked
+- production-preserving residual-union architecture retained
+- V7 bundle-consensus fields and audit columns compiled successfully
+
+The project-integrated synthetic self-test depends on V4 repository modules and is intentionally executed by the Nebius preflight inside the accepted Docker image before any real-data run.

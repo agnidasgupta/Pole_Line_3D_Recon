@@ -1,0 +1,2 @@
+group_id,slice_seq,id,relative_path,source_csv,source,geography,session,center_x,center_y,center_z
+VELASCO_CUT_CP/session1,20,VELASCO_CUT_CP__session1_slice227__slice_227.csv,VELASCO_CUT_CP/session1_slice227/slice_227.csv.gz,/absolute/path/to/VELASCO_CUT_CP/session1_slice227/slice_227.csv.gz,,VELASCO_CUT_CP,session1,0,0,0

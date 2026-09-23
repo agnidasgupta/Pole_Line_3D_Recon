@@ -1,0 +1,18 @@
+V4 Stage2 residual-union V6 local test report
+
+Checks performed:
+- Python syntax compilation for all Python sources.
+- Bash syntax validation for all shell sources.
+- Deterministic synthetic self-test using production V4 modules.
+- Production baseline strong conductor retained.
+- Separate weak parallel Stage1-labelled conductor absent from production
+  hysteresis recovered through residual union.
+- Residual candidate required a production-accepted parallel sibling.
+- Diagonal crossing candidate rejected by sibling-support geometry.
+- Runtime result unchanged when only GT labels changed.
+- No synthetic coordinate emitted.
+- Selector self-test passed in ordinal-window mode.
+
+Markers:
+- V4_STAGE2_RESIDUAL_UNION_SELF_TEST_OK
+- V4_STAGE2_RESIDUAL_UNION_SELECTOR_SELF_TEST_OK

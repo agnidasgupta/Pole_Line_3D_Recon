@@ -1,0 +1,3 @@
+ops/v4_full_dataset/profile_stage3_session.py
+v4/reconstruct_v4_stage3.py
+v4/smoke_test_v4_recon_quality.py

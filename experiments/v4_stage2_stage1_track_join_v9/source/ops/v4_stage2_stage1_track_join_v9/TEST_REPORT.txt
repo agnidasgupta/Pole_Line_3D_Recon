@@ -1,0 +1,7 @@
+V9 synthetic test coverage
+- two fragments of one conductor separated by a short missing Stage1 run are joined
+- a parallel conductor outside lateral tolerance remains separate
+- an off-axis fragment remains separate
+- all Stage1 class-2 voxels are preserved in the accepted voxel audit
+- no synthetic line voxels are created
+- no pole-pair inference is used

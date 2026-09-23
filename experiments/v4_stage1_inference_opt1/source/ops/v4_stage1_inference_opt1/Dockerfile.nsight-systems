@@ -1,0 +1,19 @@
+ARG BASE_IMAGE=va-v4-realtime:torch241-cu121
+FROM ${BASE_IMAGE}
+
+USER root
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates gnupg2 wget; \
+    wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub \
+      | gpg --dearmor > /usr/share/keyrings/nvidia-devtools-keyring.gpg; \
+    . /etc/os-release; \
+    test "${ID}" = ubuntu; \
+    release=$(printf '%s' "${VERSION_ID}" | tr -d .); \
+    arch=$(dpkg --print-architecture); \
+    printf 'deb [signed-by=/usr/share/keyrings/nvidia-devtools-keyring.gpg] https://developer.download.nvidia.com/devtools/repos/ubuntu%s/%s/ /\n' "$release" "$arch" \
+      > /etc/apt/sources.list.d/nvidia-devtools.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends nsight-systems-cli; \
+    nsys --version; \
+    rm -rf /var/lib/apt/lists/*
