@@ -31,6 +31,14 @@ main() {
     find "$root/diagnostics" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort || true
     return
   fi
+  if [ "$mode" = "--self-test" ]; then
+    docker run --rm \
+      --mount "type=bind,source=$repo/v4,target=/workspace/v4,readonly" \
+      --mount "type=bind,source=$e9_ops,target=/workspace/e9,readonly" \
+      --workdir /workspace/v4 -e PYTHONPATH=/workspace/v4:/workspace/e9 \
+      "$image" python /workspace/e9/self_test_e9_stage12.py
+    return
+  fi
   for path in "$repo/.git" "$s1_ops/run_v4_stage1_opt2.py" "$s2_ops/run_v4_stage2_stage1_electrical_tracks.py" "$e9_ops/run_e9_stage12_inmemory.py" "$baseline/PHASE1_STAGE1_OK.txt" "$input" "$model" "$calibration" "$bundle" "$profile"; do
     if [ ! -e "$path" ]; then
       echo "E9_STATUS=STOP_MISSING_REQUIRED_PATH path=$path"
@@ -52,7 +60,7 @@ main() {
 
   stamp=${E9_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
   root="$outputs/v4_stage12_inmemory_handoff_e9/$stamp"
-  mkdir -p "$root"/{control, candidate, comparisons, diagnostics, status, summaries}
+  mkdir -p "$root"/{control,candidate,comparisons,diagnostics,status,summaries}
   printf '%s\n' "$root" > /home/agni/LATEST_V4_STAGE12_E9_HARNESS.txt
   printf '%s\n' "E9_STATUS=RUNNING created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$root/STATE.txt"
   exec > >(tee -a "$root/E9_HARNESS.log") 2>&1
@@ -61,6 +69,7 @@ main() {
 
   package_failure() {
     if [ -s "$root/summaries/E9_RESULT.json" ]; then return; fi
+    mkdir -p "$root/summaries" "$root/comparisons" "$root/diagnostics"
     printf '%s\n' '{"decision":"NOT_ACCEPTED","status":"INCOMPLETE","reason":"The full validation did not complete. Review STATE.txt, E9_HARNESS.log and diagnostics before a controlled restart."}' > "$root/summaries/E9_RESULT.json"
     {
       echo '# E9 in-memory handoff: incomplete run'

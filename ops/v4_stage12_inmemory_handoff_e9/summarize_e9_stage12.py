@@ -65,8 +65,10 @@ def main() -> None:
     exact_count = int(pd.to_numeric(cand.get("stage1_exact"), errors="coerce").fillna(0).sum())
     control = control.sort_values(["group_id", "slice_seq"], kind="stable")
     cand = cand.sort_values(["group_id", "slice_seq"], kind="stable")
-    control = control.groupby("group_id", group_keys=False).apply(lambda x: x.iloc[1:])
-    cand = cand.groupby("group_id", group_keys=False).apply(lambda x: x.iloc[1:])
+    # groupby.apply drops grouping columns in newer pandas; cumcount preserves
+    # the original schema on both the Mac and the production Docker image.
+    control = control.loc[control.groupby("group_id").cumcount().gt(0)].copy()
+    cand = cand.loc[cand.groupby("group_id").cumcount().gt(0)].copy()
     control["combined_control_ms"] = (
         pd.to_numeric(control.get("csv_read_ms"), errors="coerce").fillna(0)
         + pd.to_numeric(control.get("sparse_item_prep_ms"), errors="coerce").fillna(0)
