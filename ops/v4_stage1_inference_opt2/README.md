@@ -359,3 +359,8 @@ reviewing them for environment-specific paths. Do not commit:
 - Stage 1 NPZs or per-voxel inference CSV.GZ files;
 - model/checkpoint/calibration files;
 - complete generated run directories or result archives.
+
+## E8 I/O repair update (2026-09-24 UTC)
+
+The rejected external-core E8 attempt is not an E8 result.
+The repaired I/O-only experiment retains the accepted E7 core; see [E8_IO_REPAIR_README.md](E8_IO_REPAIR_README.md).
