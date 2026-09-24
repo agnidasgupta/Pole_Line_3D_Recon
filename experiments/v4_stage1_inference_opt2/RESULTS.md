@@ -19,3 +19,7 @@ The result is interpreted using the project label rule: known positive
 pole/line labels must be preserved, while unlabeled voxels are not evidence of
 a false positive.
 
+
+## E8 I/O repair result (updated 2026-09-24 UTC)
+
+The verified record is [results/E8_IO_RESULT.md](results/E8_IO_RESULT.md).
