@@ -359,3 +359,8 @@ reviewing them for environment-specific paths. Do not commit:
 - Stage 1 NPZs or per-voxel inference CSV.GZ files;
 - model/checkpoint/calibration files;
 - complete generated run directories or result archives.
+
+## E8 pipeline update (2026-09-24 UTC)
+
+E8 is a separate bounded ordered asynchronous read/prepare/infer/write experiment.
+See [E8_PIPELINE_README.md](E8_PIPELINE_README.md); E7 remains the frozen control.
