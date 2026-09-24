@@ -33,8 +33,28 @@ The first slice of each session is excluded from the steady-state comparison.
 
 On a runtime error or stale progress heartbeat (default 600 seconds, checked
 every 20–30 seconds), the controller records GPU, container and log diagnostics.
+The Stage-1 control heartbeat checks per-slice progress, session and export logs,
+accepted markers and comparison reports as well as the outer driver log.
 Candidate sessions retry once with `RESUME=0` and atomic replacement. A failed
 control or exact-output comparison stops the run and packages an incomplete
 `NOT_ACCEPTED` diagnostic record. No source-code repair or production adoption
 is automatic. To restart after fixing a fault, rerun the controller with a new
 UTC stamp; previous roots are retained.
+
+## 2026-09-24 interrupted full-30 control
+
+The `20260924T180346Z` harness stopped at session 10/30 because its watchdog
+tracked only the outer driver log, which was quiet while session 10 wrote
+progress at 18:39:22 UTC. It sent TERM at 18:45:08 UTC, less than six minutes
+after that progress update. The two representative output comparisons passed
+(1,731 files each, zero differences); nine full-control sessions were accepted.
+No full-30 candidate or timing decision was produced. **Decision: NOT ACCEPTED
+(incomplete experiment).** This is not evidence of changed inference quality.
+
+The repaired controller watches the actual per-session activity. It supports a
+bounded resume of the original Stage-1 control by setting
+`E9_FULL30_CONTROL_STAMP=20260924T182337Z` when launching a new E9 harness.
+The original control runs with `RESUME=1` and must still pass all 30 accepted
+sessions and the production-equivalence marker. The representative pairs run
+again under the fresh E9 harness. `--self-test` now also checks the shell
+watchdog's progress-file timestamp probe.

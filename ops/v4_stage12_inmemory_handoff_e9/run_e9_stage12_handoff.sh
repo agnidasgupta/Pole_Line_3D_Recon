@@ -2,6 +2,14 @@
 # E9 full-dataset controller: disk round-trip control vs in-memory Stage1->Stage2.
 # It returns from failures instead of exiting an interactive shell.
 
+stage1_activity_epoch() {
+  local runroot=$1
+  find "$runroot/status" "$runroot/logs/stage1" "$runroot/logs/stage1_export" \
+    -maxdepth 1 -type f \( -name '*.progress.json' -o -name '*.log' \
+    -o -name '*.stage1.ok' -o -name '*.production_equivalence.json' \) \
+    -printf '%T@\n' 2>/dev/null | sort -nr | head -n 1 | cut -d. -f1
+}
+
 main() {
   mode=${1:---run}
   repo=${REPO:-/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10}
@@ -20,6 +28,7 @@ main() {
   stall_seconds=${E9_STALL_SECONDS:-600}
   max_attempts=${E9_MAX_ATTEMPTS:-2}
   session_timeout=${E9_SESSION_TIMEOUT_SECONDS:-7200}
+  full30_control_stamp=${E9_FULL30_CONTROL_STAMP:-}
 
   if [ "$mode" = "--monitor" ]; then
     root=${2:-$(cat /home/agni/LATEST_V4_STAGE12_E9_HARNESS.txt 2>/dev/null)}
@@ -32,11 +41,28 @@ main() {
     return
   fi
   if [ "$mode" = "--self-test" ]; then
-    docker run --rm \
+    if ! docker run --rm \
       --mount "type=bind,source=$repo/v4,target=/workspace/v4,readonly" \
       --mount "type=bind,source=$e9_ops,target=/workspace/e9,readonly" \
       --workdir /workspace/v4 -e PYTHONPATH=/workspace/v4:/workspace/e9 \
-      "$image" python /workspace/e9/self_test_e9_stage12.py
+      "$image" python /workspace/e9/self_test_e9_stage12.py; then
+      return 1
+    fi
+    local probe probe_epoch stale_epoch
+    probe=$(mktemp -d)
+    mkdir -p "$probe/status" "$probe/logs/stage1" "$probe/logs/stage1_export"
+    touch -d '20 minutes ago' "$probe/logs/stage1/quiet.log"
+    touch -d '20 minutes ago' "$probe/status/sample.progress.json"
+    stale_epoch=$(stage1_activity_epoch "$probe")
+    touch "$probe/status/sample.progress.json"
+    probe_epoch=$(stage1_activity_epoch "$probe")
+    rm -rf "$probe"
+    if [ -z "$stale_epoch" ] || [ $(( $(date +%s) - stale_epoch )) -lt 600 ] \
+      || [ -z "$probe_epoch" ] || [ $(( $(date +%s) - probe_epoch )) -gt 60 ]; then
+      echo 'E9_WATCHDOG_SELF_TEST_FAILED'
+      return 1
+    fi
+    echo 'E9_WATCHDOG_SELF_TEST_OK'
     return
   fi
   for path in "$repo/.git" "$s1_ops/run_v4_stage1_opt2.py" "$s2_ops/run_v4_stage2_stage1_electrical_tracks.py" "$e9_ops/run_e9_stage12_inmemory.py" "$baseline/PHASE1_STAGE1_OK.txt" "$input" "$model" "$calibration" "$bundle" "$profile"; do
@@ -113,9 +139,10 @@ main() {
     awk -F',' 'NR==1 {for(i=1;i<=NF;i++)if($i=="group_id")g=i;next} NR>1&&g {print $g;exit}' "$1" | tr -d '\r"'
   }
   capture_diagnostics() {
-    local label log out
+    local label log out runroot latest_progress latest_session_log
     label=$1
     log=$2
+    runroot=${3:-}
     out="$root/diagnostics/${label}_$(date -u +%Y%m%dT%H%M%SZ).txt"
     {
       echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -123,6 +150,16 @@ main() {
       echo "===== nvidia-smi ====="; nvidia-smi || true
       echo "===== docker ====="; docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' || true
       echo "===== log ====="; tail -n 200 "$log" 2>/dev/null || true
+      if [ -n "$runroot" ] && [ -d "$runroot" ]; then
+        echo "===== Stage1 accepted and failed sessions ====="
+        find "$runroot/status" -maxdepth 1 -type f \( -name '*.stage1.ok' -o -name '*.stage1.failed' \) -printf '%TY-%Tm-%Td %TH:%TM:%TS %f\n' 2>/dev/null | sort || true
+        latest_progress=$(find "$runroot/status" -maxdepth 1 -name '*.progress.json' -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+        echo "===== latest Stage1 progress: $latest_progress ====="
+        if [ -n "$latest_progress" ]; then stat -c '%y %n' "$latest_progress"; cat "$latest_progress"; fi
+        latest_session_log=$(find "$runroot/logs/stage1" "$runroot/logs/stage1_export" -maxdepth 1 -name '*.log' -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+        echo "===== latest Stage1 session log: $latest_session_log ====="
+        if [ -n "$latest_session_log" ]; then stat -c '%y %n' "$latest_session_log"; tail -n 120 "$latest_session_log"; fi
+      fi
     } > "$out"
     echo "E9_DIAGNOSTIC=$out"
   }
@@ -148,6 +185,7 @@ main() {
     return 0
   }
   wait_stage1_driver() {
+    local label pid log run last_change last_size size now activity
     label=$1
     pid=$(cat /home/agni/LATEST_V4_STAGE1_OPT2_PID.txt 2>/dev/null)
     log=$(cat /home/agni/LATEST_V4_STAGE1_OPT2_LAUNCH_LOG.txt 2>/dev/null)
@@ -158,9 +196,15 @@ main() {
       size=$(wc -c < "$log" 2>/dev/null || printf '0')
       now=$(date +%s)
       if [ "$size" -ne "$last_size" ]; then last_size=$size; last_change=$now; fi
+      # The outer driver log is quiet while a Docker session writes per-slice
+      # progress and its own log. Count those writes as real worker activity.
+      activity=$(stage1_activity_epoch "$run")
+      if [ -n "$activity" ] && [ "$activity" -gt "$last_change" ]; then
+        last_change=$activity
+      fi
       if [ $((now-last_change)) -gt "$stall_seconds" ]; then
-        echo "E9_STAGE1_CONTROL_STALL label=$label pid=$pid"
-        capture_diagnostics "$label-stall" "$log"
+        echo "E9_STAGE1_CONTROL_STALL label=$label pid=$pid last_activity_epoch=$last_change idle_seconds=$((now-last_change))"
+        capture_diagnostics "$label-stall" "$log" "$run"
         kill -TERM "$pid" 2>/dev/null || true
         break
       fi
@@ -171,12 +215,30 @@ main() {
       printf '%s\n' "$run"
       return 0
     fi
-    capture_diagnostics "$label-failed" "$log"
+    capture_diagnostics "$label-failed" "$log" "$run"
     return 1
   }
   launch_control_stage1() {
+    local label expected only_gid control_stamp prior_root
     label=$1; expected=$2; only_gid=$3
-    RUN_STAMP=$(date -u +%Y%m%dT%H%M%SZ) VARIANT_NAME="$label" EXPECTED_SESSIONS="$expected" ONLY_GROUP_ID="$only_gid" IMAGE="$image" \
+    control_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    if [ "$label" = e9_control_full30 ] && [ -n "$full30_control_stamp" ]; then
+      if [[ ! "$full30_control_stamp" =~ ^[0-9]{8}T[0-9]{6}Z$ ]]; then
+        echo "E9_STATUS=STOP_INVALID_CONTROL_STAMP" >&2
+        return 1
+      fi
+      prior_root="$outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/${full30_control_stamp}_e9_control_full30"
+      if [ ! -s "$prior_root/RUN_INFO.txt" ] \
+        || ! grep -qx 'variant_name=e9_control_full30' "$prior_root/RUN_INFO.txt" \
+        || ! grep -qx 'model_sha256=1b8b20c0bb2b52a1617555ed72c34311ba3839effd674bb2cac5273040d909ee' "$prior_root/RUN_INFO.txt" \
+        || ! grep -qx 'calibration_sha256=dea4829143f33d1f674176185ecd59df620c50a70488a83b0a2d6e17b81784e1' "$prior_root/RUN_INFO.txt"; then
+        echo "E9_STATUS=STOP_CONTROL_RESUME_SOURCE_MISSING root=$prior_root" >&2
+        return 1
+      fi
+      control_stamp=$full30_control_stamp
+      echo "E9_RESUMING_FULL30_STAGE1_CONTROL=$prior_root" >&2
+    fi
+    RUN_STAMP="$control_stamp" VARIANT_NAME="$label" EXPECTED_SESSIONS="$expected" ONLY_GROUP_ID="$only_gid" IMAGE="$image" \
     DETAILED_CUDA_TIMING=0 RETAIN_GATHER_HOST_BUFFERS=1 CACHE_REFERENCE_COORDINATE_CHANNELS=1 USE_CUDA_GRAPH=1 \
     PREFETCH_INPUTS=0 PREPARE_CORE_SCHEDULE=0 PREFETCH_WORKERS=1 PREFETCH_DEPTH=1 ASYNC_OUTPUT_WRITES=0 \
     GROUPNORM_INPUT_LAYOUT=0 CONV_INPUT_LAYOUT=0 CHANNELS_LAST_WEIGHTS=0 KERNEL_FACTORY_INPUT_PACK=0 SCORE_ATOL=0 RESUME=1 \
