@@ -1,0 +1,2289 @@
+{
+  "purpose": "read_only_stage1_reproducibility_diagnostic_not_ground_truth_quality",
+  "score_contract": "exact score arrays required (score_atol=0)",
+  "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+  "runs": {
+    "accepted_probe": {
+      "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "candidate": "/outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/20260924T202241Z_e9_s1_fidelity_probe/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "reference_files": 157,
+      "candidate_files": 157,
+      "missing_files": [],
+      "extra_files": [],
+      "files_compared": 157,
+      "structural_differences": {},
+      "scores": {
+        "pole": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "line": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "objectness": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        }
+      },
+      "predicted_labels": {
+        "known_positive_losses": 0,
+        "known_positive_class_flips": 0,
+        "unverified_additions": 0,
+        "changed_labels": 0,
+        "affected_slices": 0
+      },
+      "changed_slices": [],
+      "errors": [],
+      "changed_slice_count": 0,
+      "exact_stage1_payload": true
+    },
+    "accepted_control_r1": {
+      "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "candidate": "/outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/20260924T225930Z_e9_control_r1/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "reference_files": 157,
+      "candidate_files": 157,
+      "missing_files": [],
+      "extra_files": [],
+      "files_compared": 157,
+      "structural_differences": {},
+      "scores": {
+        "pole": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "line": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "objectness": {
+          "changed_values": 0,
+          "affected_slices": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        }
+      },
+      "predicted_labels": {
+        "known_positive_losses": 0,
+        "known_positive_class_flips": 0,
+        "unverified_additions": 0,
+        "changed_labels": 0,
+        "affected_slices": 0
+      },
+      "changed_slices": [],
+      "errors": [],
+      "changed_slice_count": 0,
+      "exact_stage1_payload": true
+    },
+    "failed_control_r2": {
+      "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "candidate": "/outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/20260924T230931Z_e9_control_r2/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "reference_files": 157,
+      "candidate_files": 157,
+      "missing_files": [],
+      "extra_files": [],
+      "files_compared": 157,
+      "structural_differences": {
+        "semantic": 6
+      },
+      "scores": {
+        "pole": {
+          "changed_values": 259293,
+          "affected_slices": 157,
+          "max_abs": 0.005798459053039551,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "line": {
+          "changed_values": 301220,
+          "affected_slices": 157,
+          "max_abs": 0.006320387125015259,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "objectness": {
+          "changed_values": 76967,
+          "affected_slices": 157,
+          "max_abs": 0.003680586814880371,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        }
+      },
+      "predicted_labels": {
+        "known_positive_losses": 2,
+        "known_positive_class_flips": 1,
+        "unverified_additions": 5,
+        "changed_labels": 8,
+        "affected_slices": 6
+      },
+      "changed_slices": [
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice150/slice_150_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 966,
+              "max_abs": 0.00019707530736923218,
+              "nonfinite_difference": 0,
+              "first_index": [
+                5
+              ],
+              "first_reference": "0.0046035694",
+              "first_candidate": "0.004603575"
+            },
+            "line": {
+              "changed_values": 1037,
+              "max_abs": 0.0017735958099365234,
+              "nonfinite_difference": 0,
+              "first_index": [
+                39
+              ],
+              "first_reference": "0.006663038",
+              "first_candidate": "0.0066628493"
+            },
+            "objectness": {
+              "changed_values": 276,
+              "max_abs": 0.0019707679748535156,
+              "nonfinite_difference": 0,
+              "first_index": [
+                143
+              ],
+              "first_reference": "0.045352582",
+              "first_candidate": "0.0460339"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice151/slice_151_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1567,
+              "max_abs": 0.0008386299014091492,
+              "nonfinite_difference": 0,
+              "first_index": [
+                44
+              ],
+              "first_reference": "0.007921377",
+              "first_candidate": "0.007921387"
+            },
+            "line": {
+              "changed_values": 1601,
+              "max_abs": 0.005573928356170654,
+              "nonfinite_difference": 0,
+              "first_index": [
+                35
+              ],
+              "first_reference": "0.010427719",
+              "first_candidate": "0.010428552"
+            },
+            "objectness": {
+              "changed_values": 432,
+              "max_abs": 0.0019462108612060547,
+              "nonfinite_difference": 0,
+              "first_index": [
+                62
+              ],
+              "first_reference": "0.15405758",
+              "first_candidate": "0.15304215"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice152/slice_152_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1706,
+              "max_abs": 0.0031366348266601562,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.010375595",
+              "first_candidate": "0.010231179"
+            },
+            "line": {
+              "changed_values": 1768,
+              "max_abs": 0.005922555923461914,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.0104357",
+              "first_candidate": "0.010289436"
+            },
+            "objectness": {
+              "changed_values": 528,
+              "max_abs": 0.002774477005004883,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.103748634",
+              "first_candidate": "0.10230471"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice153/slice_153_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1242,
+              "max_abs": 0.002038240432739258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                65
+              ],
+              "first_reference": "0.01432347",
+              "first_candidate": "0.014311684"
+            },
+            "line": {
+              "changed_values": 1253,
+              "max_abs": 0.00247800350189209,
+              "nonfinite_difference": 0,
+              "first_index": [
+                65
+              ],
+              "first_reference": "0.014613278",
+              "first_candidate": "0.014592592"
+            },
+            "objectness": {
+              "changed_values": 351,
+              "max_abs": 0.0018084049224853516,
+              "nonfinite_difference": 0,
+              "first_index": [
+                100
+              ],
+              "first_reference": "0.067546695",
+              "first_candidate": "0.06656919"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice154/slice_154_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1001,
+              "max_abs": 0.00018850713968276978,
+              "nonfinite_difference": 0,
+              "first_index": [
+                380
+              ],
+              "first_reference": "0.010881659",
+              "first_candidate": "0.010880685"
+            },
+            "line": {
+              "changed_values": 1008,
+              "max_abs": 0.0012814998626708984,
+              "nonfinite_difference": 0,
+              "first_index": [
+                185
+              ],
+              "first_reference": "0.014775881",
+              "first_candidate": "0.014770288"
+            },
+            "objectness": {
+              "changed_values": 285,
+              "max_abs": 0.001885056495666504,
+              "nonfinite_difference": 0,
+              "first_index": [
+                763
+              ],
+              "first_reference": "0.0715912",
+              "first_candidate": "0.0705596"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice155/slice_155_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1008,
+              "max_abs": 0.00025991350412368774,
+              "nonfinite_difference": 0,
+              "first_index": [
+                38
+              ],
+              "first_reference": "0.010377186",
+              "first_candidate": "0.010377115"
+            },
+            "line": {
+              "changed_values": 1052,
+              "max_abs": 0.002312302589416504,
+              "nonfinite_difference": 0,
+              "first_index": [
+                41
+              ],
+              "first_reference": "0.008904412",
+              "first_candidate": "0.008778767"
+            },
+            "objectness": {
+              "changed_values": 296,
+              "max_abs": 0.0025991201400756836,
+              "nonfinite_difference": 0,
+              "first_index": [
+                41
+              ],
+              "first_reference": "0.08882029",
+              "first_candidate": "0.08756384"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice156/slice_156_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 980,
+              "max_abs": 0.0001842901110649109,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.007807859",
+              "first_candidate": "0.0078078653"
+            },
+            "line": {
+              "changed_values": 975,
+              "max_abs": 0.0020692944526672363,
+              "nonfinite_difference": 0,
+              "first_index": [
+                154
+              ],
+              "first_reference": "0.0059275394",
+              "first_candidate": "0.0058408976"
+            },
+            "objectness": {
+              "changed_values": 278,
+              "max_abs": 0.0018428564071655273,
+              "nonfinite_difference": 0,
+              "first_index": [
+                154
+              ],
+              "first_reference": "0.059210256",
+              "first_candidate": "0.05834584"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice157/slice_157_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1273,
+              "max_abs": 0.0034201741218566895,
+              "nonfinite_difference": 0,
+              "first_index": [
+                31
+              ],
+              "first_reference": "0.0033592854",
+              "first_candidate": "0.0033592752"
+            },
+            "line": {
+              "changed_values": 1329,
+              "max_abs": 0.004491984844207764,
+              "nonfinite_difference": 0,
+              "first_index": [
+                131
+              ],
+              "first_reference": "0.002931602",
+              "first_candidate": "0.0029763884"
+            },
+            "objectness": {
+              "changed_values": 366,
+              "max_abs": 0.0018341541290283203,
+              "nonfinite_difference": 0,
+              "first_index": [
+                131
+              ],
+              "first_reference": "0.02931223",
+              "first_candidate": "0.029760092"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice158/slice_158_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1077,
+              "max_abs": 0.0012737512588500977,
+              "nonfinite_difference": 0,
+              "first_index": [
+                234
+              ],
+              "first_reference": "0.0070577133",
+              "first_candidate": "0.0070576593"
+            },
+            "line": {
+              "changed_values": 1321,
+              "max_abs": 0.003290146589279175,
+              "nonfinite_difference": 0,
+              "first_index": [
+                220
+              ],
+              "first_reference": "0.007495272",
+              "first_candidate": "0.0074955598"
+            },
+            "objectness": {
+              "changed_values": 331,
+              "max_abs": 0.0018196702003479004,
+              "nonfinite_difference": 0,
+              "first_index": [
+                666
+              ],
+              "first_reference": "0.068537496",
+              "first_candidate": "0.069541745"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice159/slice_159_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1187,
+              "max_abs": 0.00017593055963516235,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.0066577466",
+              "first_candidate": "0.0065612863"
+            },
+            "line": {
+              "changed_values": 1401,
+              "max_abs": 0.0022450387477874756,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.006661124",
+              "first_candidate": "0.00656456"
+            },
+            "objectness": {
+              "changed_values": 385,
+              "max_abs": 0.0017592906951904297,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.06656919",
+              "first_candidate": "0.065604836"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice160/slice_160_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1073,
+              "max_abs": 0.0017311275005340576,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.010818904",
+              "first_candidate": "0.010669068"
+            },
+            "line": {
+              "changed_values": 1111,
+              "max_abs": 0.0041465163230896,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.01083804",
+              "first_candidate": "0.010688204"
+            },
+            "objectness": {
+              "changed_values": 316,
+              "max_abs": 0.001949608325958252,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.10818896",
+              "first_candidate": "0.1066906"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice161/slice_161_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1013,
+              "max_abs": 0.0002058371901512146,
+              "nonfinite_difference": 0,
+              "first_index": [
+                25
+              ],
+              "first_reference": "0.008270644",
+              "first_candidate": "0.008270616"
+            },
+            "line": {
+              "changed_values": 995,
+              "max_abs": 0.0022169947624206543,
+              "nonfinite_difference": 0,
+              "first_index": [
+                122
+              ],
+              "first_reference": "0.009553214",
+              "first_candidate": "0.00941818"
+            },
+            "objectness": {
+              "changed_values": 334,
+              "max_abs": 0.00205838680267334,
+              "nonfinite_difference": 0,
+              "first_index": [
+                122
+              ],
+              "first_reference": "0.09534945",
+              "first_candidate": "0.09401018"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice162/slice_162_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1073,
+              "max_abs": 0.002735614776611328,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.011165278",
+              "first_candidate": "0.011164011"
+            },
+            "line": {
+              "changed_values": 1078,
+              "max_abs": 0.0017435550689697266,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.011227591",
+              "first_candidate": "0.011224409"
+            },
+            "objectness": {
+              "changed_values": 336,
+              "max_abs": 0.0018867850303649902,
+              "nonfinite_difference": 0,
+              "first_index": [
+                89
+              ],
+              "first_reference": "0.09947021",
+              "first_candidate": "0.09807932"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice163/slice_163_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 844,
+              "max_abs": 0.00016755610704421997,
+              "nonfinite_difference": 0,
+              "first_index": [
+                5
+              ],
+              "first_reference": "0.011621038",
+              "first_candidate": "0.011621831"
+            },
+            "line": {
+              "changed_values": 877,
+              "max_abs": 0.0019606351852416992,
+              "nonfinite_difference": 0,
+              "first_index": [
+                55
+              ],
+              "first_reference": "0.005111351",
+              "first_candidate": "0.0051876237"
+            },
+            "objectness": {
+              "changed_values": 273,
+              "max_abs": 0.0016756057739257812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                55
+              ],
+              "first_reference": "0.051082738",
+              "first_candidate": "0.051845465"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice164/slice_164_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 827,
+              "max_abs": 0.00016707181930541992,
+              "nonfinite_difference": 0,
+              "first_index": [
+                32
+              ],
+              "first_reference": "0.0134061845",
+              "first_candidate": "0.013406185"
+            },
+            "line": {
+              "changed_values": 847,
+              "max_abs": 0.0016505718231201172,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.015666658",
+              "first_candidate": "0.01567395"
+            },
+            "objectness": {
+              "changed_values": 268,
+              "max_abs": 0.0016706585884094238,
+              "nonfinite_difference": 0,
+              "first_index": [
+                139
+              ],
+              "first_reference": "0.0715912",
+              "first_candidate": "0.0705596"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice165/slice_165_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1061,
+              "max_abs": 0.0001863911747932434,
+              "nonfinite_difference": 0,
+              "first_index": [
+                64
+              ],
+              "first_reference": "0.008281528",
+              "first_candidate": "0.008281165"
+            },
+            "line": {
+              "changed_values": 1118,
+              "max_abs": 0.002473115921020508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                24
+              ],
+              "first_reference": "0.011056366",
+              "first_candidate": "0.011056367"
+            },
+            "objectness": {
+              "changed_values": 339,
+              "max_abs": 0.0018639564514160156,
+              "nonfinite_difference": 0,
+              "first_index": [
+                198
+              ],
+              "first_reference": "0.115960725",
+              "first_candidate": "0.114368536"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice166/slice_166_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 3198,
+              "max_abs": 0.0009126514196395874,
+              "nonfinite_difference": 0,
+              "first_index": [
+                36
+              ],
+              "first_reference": "0.009812849",
+              "first_candidate": "0.009812697"
+            },
+            "line": {
+              "changed_values": 3875,
+              "max_abs": 0.0026502013206481934,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.012214855",
+              "first_candidate": "0.012208327"
+            },
+            "objectness": {
+              "changed_values": 960,
+              "max_abs": 0.0018306970596313477,
+              "nonfinite_difference": 0,
+              "first_index": [
+                590
+              ],
+              "first_reference": "0.1666754",
+              "first_candidate": "0.16559312"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice167/slice_167_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1298,
+              "max_abs": 0.003290414810180664,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.012086822",
+              "first_candidate": "0.012170027"
+            },
+            "line": {
+              "changed_values": 1451,
+              "max_abs": 0.0026114583015441895,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.012255913",
+              "first_candidate": "0.0123391645"
+            },
+            "objectness": {
+              "changed_values": 411,
+              "max_abs": 0.0018946528434753418,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.12085322",
+              "first_candidate": "0.12168574"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice168/slice_168_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1958,
+              "max_abs": 0.00024467334151268005,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.009811882",
+              "first_candidate": "0.0096744085"
+            },
+            "line": {
+              "changed_values": 2275,
+              "max_abs": 0.0028753280639648438,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.01554473",
+              "first_candidate": "0.015548974"
+            },
+            "objectness": {
+              "changed_values": 626,
+              "max_abs": 0.0024467259645462036,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.09807932",
+              "first_candidate": "0.096705794"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice169/slice_169_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2174,
+              "max_abs": 0.00024060159921646118,
+              "nonfinite_difference": 0,
+              "first_index": [
+                10
+              ],
+              "first_reference": "0.009402615",
+              "first_candidate": "0.009270325"
+            },
+            "line": {
+              "changed_values": 2686,
+              "max_abs": 0.003097832202911377,
+              "nonfinite_difference": 0,
+              "first_index": [
+                1
+              ],
+              "first_reference": "0.013663154",
+              "first_candidate": "0.013668925"
+            },
+            "objectness": {
+              "changed_values": 705,
+              "max_abs": 0.0016307830810546875,
+              "nonfinite_difference": 0,
+              "first_index": [
+                10
+              ],
+              "first_reference": "0.09401018",
+              "first_candidate": "0.09268778"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice170/slice_170_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 3187,
+              "max_abs": 0.00016600638628005981,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.0114709735",
+              "first_candidate": "0.011313661"
+            },
+            "line": {
+              "changed_values": 4135,
+              "max_abs": 0.002725839614868164,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.011594619",
+              "first_candidate": "0.011437306"
+            },
+            "objectness": {
+              "changed_values": 1036,
+              "max_abs": 0.0016601085662841797,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.114368536",
+              "first_candidate": "0.112795405"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice171/slice_171_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1822,
+              "max_abs": 0.00021028518676757812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                206
+              ],
+              "first_reference": "0.008153785",
+              "first_candidate": "0.008037556"
+            },
+            "line": {
+              "changed_values": 2077,
+              "max_abs": 0.0023421645164489746,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.007833984",
+              "first_candidate": "0.007833579"
+            },
+            "objectness": {
+              "changed_values": 555,
+              "max_abs": 0.0021028518676757812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                206
+              ],
+              "first_reference": "0.08151976",
+              "first_candidate": "0.08035747"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice172/slice_172_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1260,
+              "max_abs": 0.001707315444946289,
+              "nonfinite_difference": 0,
+              "first_index": [
+                12
+              ],
+              "first_reference": "0.011322004",
+              "first_candidate": "0.011320698"
+            },
+            "line": {
+              "changed_values": 1420,
+              "max_abs": 0.002917051315307617,
+              "nonfinite_difference": 0,
+              "first_index": [
+                83
+              ],
+              "first_reference": "0.015453865",
+              "first_candidate": "0.015462519"
+            },
+            "objectness": {
+              "changed_values": 378,
+              "max_abs": 0.00205838680267334,
+              "nonfinite_difference": 0,
+              "first_index": [
+                498
+              ],
+              "first_reference": "0.0726367",
+              "first_candidate": "0.07369627"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice173/slice_173_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1418,
+              "max_abs": 0.00018006563186645508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.012396444",
+              "first_candidate": "0.012483083"
+            },
+            "line": {
+              "changed_values": 1647,
+              "max_abs": 0.0035999417304992676,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.0124871",
+              "first_candidate": "0.012576616"
+            },
+            "objectness": {
+              "changed_values": 417,
+              "max_abs": 0.0018006563186645508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.123365626",
+              "first_candidate": "0.12421302"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice174/slice_174_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1466,
+              "max_abs": 0.00030609965324401855,
+              "nonfinite_difference": 0,
+              "first_index": [
+                48
+              ],
+              "first_reference": "0.013031173",
+              "first_candidate": "0.013031092"
+            },
+            "line": {
+              "changed_values": 1737,
+              "max_abs": 0.0028084516525268555,
+              "nonfinite_difference": 0,
+              "first_index": [
+                20
+              ],
+              "first_reference": "0.011825637",
+              "first_candidate": "0.01182208"
+            },
+            "objectness": {
+              "changed_values": 507,
+              "max_abs": 0.0030609965324401855,
+              "nonfinite_difference": 0,
+              "first_index": [
+                155
+              ],
+              "first_reference": "0.075858176",
+              "first_candidate": "0.07696084"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice175/slice_175_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2217,
+              "max_abs": 0.00028709322214126587,
+              "nonfinite_difference": 0,
+              "first_index": [
+                16
+              ],
+              "first_reference": "0.013219973",
+              "first_candidate": "0.013220397"
+            },
+            "line": {
+              "changed_values": 2797,
+              "max_abs": 0.006320387125015259,
+              "nonfinite_difference": 0,
+              "first_index": [
+                16
+              ],
+              "first_reference": "0.01355113",
+              "first_candidate": "0.013562057"
+            },
+            "objectness": {
+              "changed_values": 737,
+              "max_abs": 0.002870917320251465,
+              "nonfinite_difference": 0,
+              "first_index": [
+                27
+              ],
+              "first_reference": "0.10521054",
+              "first_candidate": "0.1066906"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice176/slice_176_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1831,
+              "max_abs": 0.00023156404495239258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.0075913887",
+              "first_candidate": "0.0075912173"
+            },
+            "line": {
+              "changed_values": 2140,
+              "max_abs": 0.0023910701274871826,
+              "nonfinite_difference": 0,
+              "first_index": [
+                12
+              ],
+              "first_reference": "0.00905381",
+              "first_candidate": "0.00905312"
+            },
+            "objectness": {
+              "changed_values": 604,
+              "max_abs": 0.0023156404495239258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                257
+              ],
+              "first_reference": "0.09268778",
+              "first_candidate": "0.09138211"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice177/slice_177_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 4647,
+              "max_abs": 0.0010948628187179565,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.007808595",
+              "first_candidate": "0.0076968623"
+            },
+            "line": {
+              "changed_values": 6288,
+              "max_abs": 0.0034727156162261963,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.00783524",
+              "first_candidate": "0.007723507"
+            },
+            "objectness": {
+              "changed_values": 1598,
+              "max_abs": 0.0019056200981140137,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.078078166",
+              "first_candidate": "0.07696084"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice179/slice_179_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2246,
+              "max_abs": 0.00018533878028392792,
+              "nonfinite_difference": 0,
+              "first_index": [
+                344
+              ],
+              "first_reference": "0.008518267",
+              "first_candidate": "0.00851801"
+            },
+            "line": {
+              "changed_values": 2901,
+              "max_abs": 0.002660214900970459,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.013412033",
+              "first_candidate": "0.013416671"
+            },
+            "objectness": {
+              "changed_values": 744,
+              "max_abs": 0.0018533915281295776,
+              "nonfinite_difference": 0,
+              "first_index": [
+                471
+              ],
+              "first_reference": "0.056652427",
+              "first_candidate": "0.05749328"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice180/slice_180_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 979,
+              "max_abs": 0.00028908252716064453,
+              "nonfinite_difference": 0,
+              "first_index": [
+                102
+              ],
+              "first_reference": "0.00839642",
+              "first_candidate": "0.008396192"
+            },
+            "line": {
+              "changed_values": 1037,
+              "max_abs": 0.0014296770095825195,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.011585066",
+              "first_candidate": "0.011587399"
+            },
+            "objectness": {
+              "changed_values": 299,
+              "max_abs": 0.0028908848762512207,
+              "nonfinite_difference": 0,
+              "first_index": [
+                177
+              ],
+              "first_reference": "0.1561049",
+              "first_candidate": "0.15713684"
+            }
+          }
+        }
+      ],
+      "errors": [],
+      "changed_slice_count": 157,
+      "exact_stage1_payload": false
+    },
+    "failed_full30_control": {
+      "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "candidate": "/outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/20260924T182337Z_e9_control_full30/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+      "reference_files": 157,
+      "candidate_files": 157,
+      "missing_files": [],
+      "extra_files": [],
+      "files_compared": 157,
+      "structural_differences": {
+        "semantic": 6
+      },
+      "scores": {
+        "pole": {
+          "changed_values": 259293,
+          "affected_slices": 157,
+          "max_abs": 0.005798459053039551,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "line": {
+          "changed_values": 301220,
+          "affected_slices": 157,
+          "max_abs": 0.006320387125015259,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        },
+        "objectness": {
+          "changed_values": 76967,
+          "affected_slices": 157,
+          "max_abs": 0.003680586814880371,
+          "nonfinite_difference": 0,
+          "dtype_or_shape_mismatch": 0
+        }
+      },
+      "predicted_labels": {
+        "known_positive_losses": 2,
+        "known_positive_class_flips": 1,
+        "unverified_additions": 5,
+        "changed_labels": 8,
+        "affected_slices": 6
+      },
+      "changed_slices": [
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice150/slice_150_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 966,
+              "max_abs": 0.00019707530736923218,
+              "nonfinite_difference": 0,
+              "first_index": [
+                5
+              ],
+              "first_reference": "0.0046035694",
+              "first_candidate": "0.004603575"
+            },
+            "line": {
+              "changed_values": 1037,
+              "max_abs": 0.0017735958099365234,
+              "nonfinite_difference": 0,
+              "first_index": [
+                39
+              ],
+              "first_reference": "0.006663038",
+              "first_candidate": "0.0066628493"
+            },
+            "objectness": {
+              "changed_values": 276,
+              "max_abs": 0.0019707679748535156,
+              "nonfinite_difference": 0,
+              "first_index": [
+                143
+              ],
+              "first_reference": "0.045352582",
+              "first_candidate": "0.0460339"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice151/slice_151_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1567,
+              "max_abs": 0.0008386299014091492,
+              "nonfinite_difference": 0,
+              "first_index": [
+                44
+              ],
+              "first_reference": "0.007921377",
+              "first_candidate": "0.007921387"
+            },
+            "line": {
+              "changed_values": 1601,
+              "max_abs": 0.005573928356170654,
+              "nonfinite_difference": 0,
+              "first_index": [
+                35
+              ],
+              "first_reference": "0.010427719",
+              "first_candidate": "0.010428552"
+            },
+            "objectness": {
+              "changed_values": 432,
+              "max_abs": 0.0019462108612060547,
+              "nonfinite_difference": 0,
+              "first_index": [
+                62
+              ],
+              "first_reference": "0.15405758",
+              "first_candidate": "0.15304215"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice152/slice_152_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1706,
+              "max_abs": 0.0031366348266601562,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.010375595",
+              "first_candidate": "0.010231179"
+            },
+            "line": {
+              "changed_values": 1768,
+              "max_abs": 0.005922555923461914,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.0104357",
+              "first_candidate": "0.010289436"
+            },
+            "objectness": {
+              "changed_values": 528,
+              "max_abs": 0.002774477005004883,
+              "nonfinite_difference": 0,
+              "first_index": [
+                49
+              ],
+              "first_reference": "0.103748634",
+              "first_candidate": "0.10230471"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice153/slice_153_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1242,
+              "max_abs": 0.002038240432739258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                65
+              ],
+              "first_reference": "0.01432347",
+              "first_candidate": "0.014311684"
+            },
+            "line": {
+              "changed_values": 1253,
+              "max_abs": 0.00247800350189209,
+              "nonfinite_difference": 0,
+              "first_index": [
+                65
+              ],
+              "first_reference": "0.014613278",
+              "first_candidate": "0.014592592"
+            },
+            "objectness": {
+              "changed_values": 351,
+              "max_abs": 0.0018084049224853516,
+              "nonfinite_difference": 0,
+              "first_index": [
+                100
+              ],
+              "first_reference": "0.067546695",
+              "first_candidate": "0.06656919"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice154/slice_154_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1001,
+              "max_abs": 0.00018850713968276978,
+              "nonfinite_difference": 0,
+              "first_index": [
+                380
+              ],
+              "first_reference": "0.010881659",
+              "first_candidate": "0.010880685"
+            },
+            "line": {
+              "changed_values": 1008,
+              "max_abs": 0.0012814998626708984,
+              "nonfinite_difference": 0,
+              "first_index": [
+                185
+              ],
+              "first_reference": "0.014775881",
+              "first_candidate": "0.014770288"
+            },
+            "objectness": {
+              "changed_values": 285,
+              "max_abs": 0.001885056495666504,
+              "nonfinite_difference": 0,
+              "first_index": [
+                763
+              ],
+              "first_reference": "0.0715912",
+              "first_candidate": "0.0705596"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice155/slice_155_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1008,
+              "max_abs": 0.00025991350412368774,
+              "nonfinite_difference": 0,
+              "first_index": [
+                38
+              ],
+              "first_reference": "0.010377186",
+              "first_candidate": "0.010377115"
+            },
+            "line": {
+              "changed_values": 1052,
+              "max_abs": 0.002312302589416504,
+              "nonfinite_difference": 0,
+              "first_index": [
+                41
+              ],
+              "first_reference": "0.008904412",
+              "first_candidate": "0.008778767"
+            },
+            "objectness": {
+              "changed_values": 296,
+              "max_abs": 0.0025991201400756836,
+              "nonfinite_difference": 0,
+              "first_index": [
+                41
+              ],
+              "first_reference": "0.08882029",
+              "first_candidate": "0.08756384"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice156/slice_156_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 980,
+              "max_abs": 0.0001842901110649109,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.007807859",
+              "first_candidate": "0.0078078653"
+            },
+            "line": {
+              "changed_values": 975,
+              "max_abs": 0.0020692944526672363,
+              "nonfinite_difference": 0,
+              "first_index": [
+                154
+              ],
+              "first_reference": "0.0059275394",
+              "first_candidate": "0.0058408976"
+            },
+            "objectness": {
+              "changed_values": 278,
+              "max_abs": 0.0018428564071655273,
+              "nonfinite_difference": 0,
+              "first_index": [
+                154
+              ],
+              "first_reference": "0.059210256",
+              "first_candidate": "0.05834584"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice157/slice_157_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1273,
+              "max_abs": 0.0034201741218566895,
+              "nonfinite_difference": 0,
+              "first_index": [
+                31
+              ],
+              "first_reference": "0.0033592854",
+              "first_candidate": "0.0033592752"
+            },
+            "line": {
+              "changed_values": 1329,
+              "max_abs": 0.004491984844207764,
+              "nonfinite_difference": 0,
+              "first_index": [
+                131
+              ],
+              "first_reference": "0.002931602",
+              "first_candidate": "0.0029763884"
+            },
+            "objectness": {
+              "changed_values": 366,
+              "max_abs": 0.0018341541290283203,
+              "nonfinite_difference": 0,
+              "first_index": [
+                131
+              ],
+              "first_reference": "0.02931223",
+              "first_candidate": "0.029760092"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice158/slice_158_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1077,
+              "max_abs": 0.0012737512588500977,
+              "nonfinite_difference": 0,
+              "first_index": [
+                234
+              ],
+              "first_reference": "0.0070577133",
+              "first_candidate": "0.0070576593"
+            },
+            "line": {
+              "changed_values": 1321,
+              "max_abs": 0.003290146589279175,
+              "nonfinite_difference": 0,
+              "first_index": [
+                220
+              ],
+              "first_reference": "0.007495272",
+              "first_candidate": "0.0074955598"
+            },
+            "objectness": {
+              "changed_values": 331,
+              "max_abs": 0.0018196702003479004,
+              "nonfinite_difference": 0,
+              "first_index": [
+                666
+              ],
+              "first_reference": "0.068537496",
+              "first_candidate": "0.069541745"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice159/slice_159_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1187,
+              "max_abs": 0.00017593055963516235,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.0066577466",
+              "first_candidate": "0.0065612863"
+            },
+            "line": {
+              "changed_values": 1401,
+              "max_abs": 0.0022450387477874756,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.006661124",
+              "first_candidate": "0.00656456"
+            },
+            "objectness": {
+              "changed_values": 385,
+              "max_abs": 0.0017592906951904297,
+              "nonfinite_difference": 0,
+              "first_index": [
+                40
+              ],
+              "first_reference": "0.06656919",
+              "first_candidate": "0.065604836"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice160/slice_160_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1073,
+              "max_abs": 0.0017311275005340576,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.010818904",
+              "first_candidate": "0.010669068"
+            },
+            "line": {
+              "changed_values": 1111,
+              "max_abs": 0.0041465163230896,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.01083804",
+              "first_candidate": "0.010688204"
+            },
+            "objectness": {
+              "changed_values": 316,
+              "max_abs": 0.001949608325958252,
+              "nonfinite_difference": 0,
+              "first_index": [
+                57
+              ],
+              "first_reference": "0.10818896",
+              "first_candidate": "0.1066906"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice161/slice_161_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1013,
+              "max_abs": 0.0002058371901512146,
+              "nonfinite_difference": 0,
+              "first_index": [
+                25
+              ],
+              "first_reference": "0.008270644",
+              "first_candidate": "0.008270616"
+            },
+            "line": {
+              "changed_values": 995,
+              "max_abs": 0.0022169947624206543,
+              "nonfinite_difference": 0,
+              "first_index": [
+                122
+              ],
+              "first_reference": "0.009553214",
+              "first_candidate": "0.00941818"
+            },
+            "objectness": {
+              "changed_values": 334,
+              "max_abs": 0.00205838680267334,
+              "nonfinite_difference": 0,
+              "first_index": [
+                122
+              ],
+              "first_reference": "0.09534945",
+              "first_candidate": "0.09401018"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice162/slice_162_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1073,
+              "max_abs": 0.002735614776611328,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.011165278",
+              "first_candidate": "0.011164011"
+            },
+            "line": {
+              "changed_values": 1078,
+              "max_abs": 0.0017435550689697266,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.011227591",
+              "first_candidate": "0.011224409"
+            },
+            "objectness": {
+              "changed_values": 336,
+              "max_abs": 0.0018867850303649902,
+              "nonfinite_difference": 0,
+              "first_index": [
+                89
+              ],
+              "first_reference": "0.09947021",
+              "first_candidate": "0.09807932"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice163/slice_163_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 844,
+              "max_abs": 0.00016755610704421997,
+              "nonfinite_difference": 0,
+              "first_index": [
+                5
+              ],
+              "first_reference": "0.011621038",
+              "first_candidate": "0.011621831"
+            },
+            "line": {
+              "changed_values": 877,
+              "max_abs": 0.0019606351852416992,
+              "nonfinite_difference": 0,
+              "first_index": [
+                55
+              ],
+              "first_reference": "0.005111351",
+              "first_candidate": "0.0051876237"
+            },
+            "objectness": {
+              "changed_values": 273,
+              "max_abs": 0.0016756057739257812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                55
+              ],
+              "first_reference": "0.051082738",
+              "first_candidate": "0.051845465"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice164/slice_164_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 827,
+              "max_abs": 0.00016707181930541992,
+              "nonfinite_difference": 0,
+              "first_index": [
+                32
+              ],
+              "first_reference": "0.0134061845",
+              "first_candidate": "0.013406185"
+            },
+            "line": {
+              "changed_values": 847,
+              "max_abs": 0.0016505718231201172,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.015666658",
+              "first_candidate": "0.01567395"
+            },
+            "objectness": {
+              "changed_values": 268,
+              "max_abs": 0.0016706585884094238,
+              "nonfinite_difference": 0,
+              "first_index": [
+                139
+              ],
+              "first_reference": "0.0715912",
+              "first_candidate": "0.0705596"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice165/slice_165_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1061,
+              "max_abs": 0.0001863911747932434,
+              "nonfinite_difference": 0,
+              "first_index": [
+                64
+              ],
+              "first_reference": "0.008281528",
+              "first_candidate": "0.008281165"
+            },
+            "line": {
+              "changed_values": 1118,
+              "max_abs": 0.002473115921020508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                24
+              ],
+              "first_reference": "0.011056366",
+              "first_candidate": "0.011056367"
+            },
+            "objectness": {
+              "changed_values": 339,
+              "max_abs": 0.0018639564514160156,
+              "nonfinite_difference": 0,
+              "first_index": [
+                198
+              ],
+              "first_reference": "0.115960725",
+              "first_candidate": "0.114368536"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice166/slice_166_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 3198,
+              "max_abs": 0.0009126514196395874,
+              "nonfinite_difference": 0,
+              "first_index": [
+                36
+              ],
+              "first_reference": "0.009812849",
+              "first_candidate": "0.009812697"
+            },
+            "line": {
+              "changed_values": 3875,
+              "max_abs": 0.0026502013206481934,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.012214855",
+              "first_candidate": "0.012208327"
+            },
+            "objectness": {
+              "changed_values": 960,
+              "max_abs": 0.0018306970596313477,
+              "nonfinite_difference": 0,
+              "first_index": [
+                590
+              ],
+              "first_reference": "0.1666754",
+              "first_candidate": "0.16559312"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice167/slice_167_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1298,
+              "max_abs": 0.003290414810180664,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.012086822",
+              "first_candidate": "0.012170027"
+            },
+            "line": {
+              "changed_values": 1451,
+              "max_abs": 0.0026114583015441895,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.012255913",
+              "first_candidate": "0.0123391645"
+            },
+            "objectness": {
+              "changed_values": 411,
+              "max_abs": 0.0018946528434753418,
+              "nonfinite_difference": 0,
+              "first_index": [
+                13
+              ],
+              "first_reference": "0.12085322",
+              "first_candidate": "0.12168574"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice168/slice_168_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1958,
+              "max_abs": 0.00024467334151268005,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.009811882",
+              "first_candidate": "0.0096744085"
+            },
+            "line": {
+              "changed_values": 2275,
+              "max_abs": 0.0028753280639648438,
+              "nonfinite_difference": 0,
+              "first_index": [
+                7
+              ],
+              "first_reference": "0.01554473",
+              "first_candidate": "0.015548974"
+            },
+            "objectness": {
+              "changed_values": 626,
+              "max_abs": 0.0024467259645462036,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.09807932",
+              "first_candidate": "0.096705794"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice169/slice_169_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2174,
+              "max_abs": 0.00024060159921646118,
+              "nonfinite_difference": 0,
+              "first_index": [
+                10
+              ],
+              "first_reference": "0.009402615",
+              "first_candidate": "0.009270325"
+            },
+            "line": {
+              "changed_values": 2686,
+              "max_abs": 0.003097832202911377,
+              "nonfinite_difference": 0,
+              "first_index": [
+                1
+              ],
+              "first_reference": "0.013663154",
+              "first_candidate": "0.013668925"
+            },
+            "objectness": {
+              "changed_values": 705,
+              "max_abs": 0.0016307830810546875,
+              "nonfinite_difference": 0,
+              "first_index": [
+                10
+              ],
+              "first_reference": "0.09401018",
+              "first_candidate": "0.09268778"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice170/slice_170_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 3187,
+              "max_abs": 0.00016600638628005981,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.0114709735",
+              "first_candidate": "0.011313661"
+            },
+            "line": {
+              "changed_values": 4135,
+              "max_abs": 0.002725839614868164,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.011594619",
+              "first_candidate": "0.011437306"
+            },
+            "objectness": {
+              "changed_values": 1036,
+              "max_abs": 0.0016601085662841797,
+              "nonfinite_difference": 0,
+              "first_index": [
+                19
+              ],
+              "first_reference": "0.114368536",
+              "first_candidate": "0.112795405"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice171/slice_171_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1822,
+              "max_abs": 0.00021028518676757812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                206
+              ],
+              "first_reference": "0.008153785",
+              "first_candidate": "0.008037556"
+            },
+            "line": {
+              "changed_values": 2077,
+              "max_abs": 0.0023421645164489746,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.007833984",
+              "first_candidate": "0.007833579"
+            },
+            "objectness": {
+              "changed_values": 555,
+              "max_abs": 0.0021028518676757812,
+              "nonfinite_difference": 0,
+              "first_index": [
+                206
+              ],
+              "first_reference": "0.08151976",
+              "first_candidate": "0.08035747"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice172/slice_172_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1260,
+              "max_abs": 0.001707315444946289,
+              "nonfinite_difference": 0,
+              "first_index": [
+                12
+              ],
+              "first_reference": "0.011322004",
+              "first_candidate": "0.011320698"
+            },
+            "line": {
+              "changed_values": 1420,
+              "max_abs": 0.002917051315307617,
+              "nonfinite_difference": 0,
+              "first_index": [
+                83
+              ],
+              "first_reference": "0.015453865",
+              "first_candidate": "0.015462519"
+            },
+            "objectness": {
+              "changed_values": 378,
+              "max_abs": 0.00205838680267334,
+              "nonfinite_difference": 0,
+              "first_index": [
+                498
+              ],
+              "first_reference": "0.0726367",
+              "first_candidate": "0.07369627"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice173/slice_173_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1418,
+              "max_abs": 0.00018006563186645508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.012396444",
+              "first_candidate": "0.012483083"
+            },
+            "line": {
+              "changed_values": 1647,
+              "max_abs": 0.0035999417304992676,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.0124871",
+              "first_candidate": "0.012576616"
+            },
+            "objectness": {
+              "changed_values": 417,
+              "max_abs": 0.0018006563186645508,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.123365626",
+              "first_candidate": "0.12421302"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice174/slice_174_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1466,
+              "max_abs": 0.00030609965324401855,
+              "nonfinite_difference": 0,
+              "first_index": [
+                48
+              ],
+              "first_reference": "0.013031173",
+              "first_candidate": "0.013031092"
+            },
+            "line": {
+              "changed_values": 1737,
+              "max_abs": 0.0028084516525268555,
+              "nonfinite_difference": 0,
+              "first_index": [
+                20
+              ],
+              "first_reference": "0.011825637",
+              "first_candidate": "0.01182208"
+            },
+            "objectness": {
+              "changed_values": 507,
+              "max_abs": 0.0030609965324401855,
+              "nonfinite_difference": 0,
+              "first_index": [
+                155
+              ],
+              "first_reference": "0.075858176",
+              "first_candidate": "0.07696084"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice175/slice_175_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2217,
+              "max_abs": 0.00028709322214126587,
+              "nonfinite_difference": 0,
+              "first_index": [
+                16
+              ],
+              "first_reference": "0.013219973",
+              "first_candidate": "0.013220397"
+            },
+            "line": {
+              "changed_values": 2797,
+              "max_abs": 0.006320387125015259,
+              "nonfinite_difference": 0,
+              "first_index": [
+                16
+              ],
+              "first_reference": "0.01355113",
+              "first_candidate": "0.013562057"
+            },
+            "objectness": {
+              "changed_values": 737,
+              "max_abs": 0.002870917320251465,
+              "nonfinite_difference": 0,
+              "first_index": [
+                27
+              ],
+              "first_reference": "0.10521054",
+              "first_candidate": "0.1066906"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice176/slice_176_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 1831,
+              "max_abs": 0.00023156404495239258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                4
+              ],
+              "first_reference": "0.0075913887",
+              "first_candidate": "0.0075912173"
+            },
+            "line": {
+              "changed_values": 2140,
+              "max_abs": 0.0023910701274871826,
+              "nonfinite_difference": 0,
+              "first_index": [
+                12
+              ],
+              "first_reference": "0.00905381",
+              "first_candidate": "0.00905312"
+            },
+            "objectness": {
+              "changed_values": 604,
+              "max_abs": 0.0023156404495239258,
+              "nonfinite_difference": 0,
+              "first_index": [
+                257
+              ],
+              "first_reference": "0.09268778",
+              "first_candidate": "0.09138211"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice177/slice_177_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 4647,
+              "max_abs": 0.0010948628187179565,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.007808595",
+              "first_candidate": "0.0076968623"
+            },
+            "line": {
+              "changed_values": 6288,
+              "max_abs": 0.0034727156162261963,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.00783524",
+              "first_candidate": "0.007723507"
+            },
+            "objectness": {
+              "changed_values": 1598,
+              "max_abs": 0.0019056200981140137,
+              "nonfinite_difference": 0,
+              "first_index": [
+                29
+              ],
+              "first_reference": "0.078078166",
+              "first_candidate": "0.07696084"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice179/slice_179_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 2246,
+              "max_abs": 0.00018533878028392792,
+              "nonfinite_difference": 0,
+              "first_index": [
+                344
+              ],
+              "first_reference": "0.008518267",
+              "first_candidate": "0.00851801"
+            },
+            "line": {
+              "changed_values": 2901,
+              "max_abs": 0.002660214900970459,
+              "nonfinite_difference": 0,
+              "first_index": [
+                14
+              ],
+              "first_reference": "0.013412033",
+              "first_candidate": "0.013416671"
+            },
+            "objectness": {
+              "changed_values": 744,
+              "max_abs": 0.0018533915281295776,
+              "nonfinite_difference": 0,
+              "first_index": [
+                471
+              ],
+              "first_reference": "0.056652427",
+              "first_candidate": "0.05749328"
+            }
+          }
+        },
+        {
+          "file": "stage1_scores/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029/session2_slice180/slice_180_stage1.npz",
+          "scores": {
+            "pole": {
+              "changed_values": 979,
+              "max_abs": 0.00028908252716064453,
+              "nonfinite_difference": 0,
+              "first_index": [
+                102
+              ],
+              "first_reference": "0.00839642",
+              "first_candidate": "0.008396192"
+            },
+            "line": {
+              "changed_values": 1037,
+              "max_abs": 0.0014296770095825195,
+              "nonfinite_difference": 0,
+              "first_index": [
+                43
+              ],
+              "first_reference": "0.011585066",
+              "first_candidate": "0.011587399"
+            },
+            "objectness": {
+              "changed_values": 299,
+              "max_abs": 0.0028908848762512207,
+              "nonfinite_difference": 0,
+              "first_index": [
+                177
+              ],
+              "first_reference": "0.1561049",
+              "first_candidate": "0.15713684"
+            }
+          }
+        }
+      ],
+      "errors": [],
+      "changed_slice_count": 157,
+      "exact_stage1_payload": false
+    }
+  }
+}

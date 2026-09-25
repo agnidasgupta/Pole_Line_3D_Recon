@@ -13,6 +13,7 @@ The registry remains the source-of-truth for provenance only:
 | [harpreet_v4_h100_opt](harpreet_v4_h100_opt/RESULTS.md) | **Validated**: Stage 1 11.3% lower steady latency; Stage 2 exact after serial refiner evaluation. |
 | [v4_stage1_inference_opt1](v4_stage1_inference_opt1/RESULTS.md) | Profiling/inference experiment archived; no final acceptance result recorded here. |
 | [v4_stage1_inference_opt2](v4_stage1_inference_opt2/RESULTS.md) | **Validated experiment**: production-equivalence checks passed through the 30-session, 3,738-slice E7 run. |
+| [v4_stage12_inmemory_handoff_e9](v4_stage12_inmemory_handoff_e9/RESULTS.md) | **NOT ACCEPTED**: Stage-1 controls changed eight predictions; full-30 in-memory candidate and timing result incomplete. |
 | [v4_stage2_stage1_electrical_v10](v4_stage2_stage1_electrical_v10/RESULTS.md) | Stage-2 reconstruction contract source; no separate result record was preserved. |
 | [v4_stage2_stage1_electrical_v10_opt1](v4_stage2_stage1_electrical_v10_opt1/RESULTS.md) | Optimized reconstruction experiment; no independently accepted benchmark is recorded here. |
 | [v4_stage3_incremental](v4_stage3_incremental/RESULTS.md) | **Validated experiment**: 30-session exact-equivalence regression recorded. |
