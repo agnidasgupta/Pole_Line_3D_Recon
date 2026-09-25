@@ -1,0 +1,184 @@
+{
+  "decision": "ISOLATION_PASS_E9_NOT_ACCEPTED",
+  "experiment": "E9 Stage1 A-B-A-B isolation against accepted V4 production",
+  "interpretation": "Four fresh representative runs passed exactly; intermittent earlier Graph-on differences remain unexplained. A new full-30 E9 comparison is required.",
+  "reference": "/outputs/poleline_voxel_run_session_groups/v4_production/full_dataset_runs/d9977c39c443f5fa14f8/20260825T203403Z/stage1/NYSEGDistVegMgnt_AUBURN_-_SPRUCE_HAVEN_FARMS_TAP_520-3p_2029__session2",
+  "runs": [
+    {
+      "errors": [],
+      "exact_stage1_payload": true,
+      "extra_files": [],
+      "files_compared": 157,
+      "label": "e9_isolate_graph0_r1",
+      "missing_files": [],
+      "predicted_labels": {
+        "affected_slices": 0,
+        "changed_labels": 0,
+        "known_positive_class_flips": 0,
+        "known_positive_losses": 0,
+        "unverified_additions": 0
+      },
+      "resume": 0,
+      "scores": {
+        "line": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "objectness": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "pole": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        }
+      },
+      "use_cuda_graph": 0
+    },
+    {
+      "errors": [],
+      "exact_stage1_payload": true,
+      "extra_files": [],
+      "files_compared": 157,
+      "label": "e9_isolate_graph1_r1",
+      "missing_files": [],
+      "predicted_labels": {
+        "affected_slices": 0,
+        "changed_labels": 0,
+        "known_positive_class_flips": 0,
+        "known_positive_losses": 0,
+        "unverified_additions": 0
+      },
+      "resume": 0,
+      "scores": {
+        "line": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "objectness": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "pole": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        }
+      },
+      "use_cuda_graph": 1
+    },
+    {
+      "errors": [],
+      "exact_stage1_payload": true,
+      "extra_files": [],
+      "files_compared": 157,
+      "label": "e9_isolate_graph0_r2",
+      "missing_files": [],
+      "predicted_labels": {
+        "affected_slices": 0,
+        "changed_labels": 0,
+        "known_positive_class_flips": 0,
+        "known_positive_losses": 0,
+        "unverified_additions": 0
+      },
+      "resume": 0,
+      "scores": {
+        "line": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "objectness": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "pole": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        }
+      },
+      "use_cuda_graph": 0
+    },
+    {
+      "errors": [],
+      "exact_stage1_payload": true,
+      "extra_files": [],
+      "files_compared": 157,
+      "label": "e9_isolate_graph1_r2",
+      "missing_files": [],
+      "predicted_labels": {
+        "affected_slices": 0,
+        "changed_labels": 0,
+        "known_positive_class_flips": 0,
+        "known_positive_losses": 0,
+        "unverified_additions": 0
+      },
+      "resume": 0,
+      "scores": {
+        "line": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "objectness": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        },
+        "pole": {
+          "affected_slices": 0,
+          "changed_values": 0,
+          "dtype_or_shape_mismatch": 0,
+          "max_abs": 0.0,
+          "nonfinite_difference": 0
+        }
+      },
+      "use_cuda_graph": 1
+    }
+  ],
+  "score_contract": "exact score arrays required (score_atol=0)",
+  "source_commit": "e6f6ff07ba072401acf420cf4fbd3d4691697bc9",
+  "summary": {
+    "full30_e9_complete": false,
+    "graph_off_runs": 2,
+    "graph_on_runs": 2,
+    "predicted_labels_changed": 0,
+    "runs": 4,
+    "score_values_changed": {
+      "line": 0,
+      "objectness": 0,
+      "pole": 0
+    },
+    "slice_payload_comparisons": 628
+  },
+  "update_date_utc": "2026-09-25"
+}

@@ -50,14 +50,39 @@ full-30 comparison. The watchdog interruption on the first full-30 attempt
 and the later exact-score control failures blocked E9 before a valid timing
 summary. A synthetic self-test percentage is not a measured E9 gain.
 
-**Next gate:** Run the representative Stage-1 isolation in
-[`ops/v4_stage12_inmemory_handoff_e9/run_e9_stage1_isolation.sh`](../../ops/v4_stage12_inmemory_handoff_e9/run_e9_stage1_isolation.sh).
-It runs fresh Graph-off/Graph-on controls twice with identical other flags,
-records source/asset hashes, and compares every saved score and predicted label
-against production. It does not run E9 or change production. A failing mode
-must not be used for either E9 arm. Because Graph-on controls already failed,
-two new Graph-on passes alone cannot clear that history. If both fresh
-Graph-off controls pass exactly, use Graph-off for both arms in a *new* E9
-validation run; otherwise investigate the source/configuration difference
-before running 30 sessions. The isolation never accepts E9: every Stage-1,
-Stage-2, coverage, and timing gate in the E9 README still applies.
+## Fresh Stage-1 isolation (2026-09-25 UTC)
+
+The A-B-A-B isolation used four **fresh** 157-slice runs at source commit
+`e6f6ff07ba072401acf420cf4fbd3d4691697bc9`. The accepted checkpoint and
+calibration hashes matched the production assets above. All runs used BF16,
+batch 12, channels-last, full model heads, `RESUME=0`, and `score_atol=0`;
+the only tested setting changed between runs was CUDA Graph replay.
+
+| Run | CUDA Graph | Production score payloads exact | Pole / line / objectness score values changed | Predicted labels changed | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `e9_isolate_graph0_r1` | Off | 157/157 | 0 / 0 / 0 | 0 | PASS |
+| `e9_isolate_graph1_r1` | On | 157/157 | 0 / 0 / 0 | 0 | PASS |
+| `e9_isolate_graph0_r2` | Off | 157/157 | 0 / 0 / 0 | 0 | PASS |
+| `e9_isolate_graph1_r2` | On | 157/157 | 0 / 0 / 0 | 0 | PASS |
+
+In total, **628/628 slice payload comparisons passed**, with zero changed
+score values and zero changed labels. The four independent reports show no
+missing/extra files or comparison errors. This supports exact reproduction in
+these fresh representative runs. It does **not** explain the earlier Graph-on
+failures or prove that the `RESUME` flag caused them; the earlier failures
+remain evidence of an intermittent alternate execution path. The isolation
+did not run Stage 2 or the complete 30-session candidate.
+
+[Machine-readable isolation results](results/E9_STAGE1_ISOLATION_20260925.json)
+include all four per-run score and label counts without model or NPZ files.
+
+The next experimental controller uses **CUDA Graph off and `RESUME=0` for both
+Stage-1 arms**, so the disk control and in-memory candidate are compared under
+the same fresh-run configuration. It refuses `E9_FULL30_CONTROL_STAMP` to
+prevent reuse of a previous, potentially non-equivalent control. These are
+execution settings only; the accepted checkpoint, calibration, scores,
+thresholds, and reconstruction rules are unchanged. The 30-session run must
+still pass its per-session exact Stage-1 payload, Stage-2 output, coverage,
+and timing gates before E9 can be accepted.
+
+**Current decision: NOT ACCEPTED.** No valid full-30 E9 speedup is available.

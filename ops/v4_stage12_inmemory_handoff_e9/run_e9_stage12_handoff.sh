@@ -65,6 +65,12 @@ main() {
     echo 'E9_WATCHDOG_SELF_TEST_OK'
     return
   fi
+  # E9 fidelity controls must start from fresh roots. Reusing a prior full-30
+  # control could preserve an earlier, non-equivalent Stage-1 payload.
+  if [ -n "$full30_control_stamp" ]; then
+    echo 'E9_STATUS=STOP_PRIOR_FULL30_CONTROL_DISALLOWED; start a fresh run without E9_FULL30_CONTROL_STAMP'
+    return
+  fi
   for path in "$repo/.git" "$s1_ops/run_v4_stage1_opt2.py" "$s2_ops/run_v4_stage2_stage1_electrical_tracks.py" "$e9_ops/run_e9_stage12_inmemory.py" "$baseline/PHASE1_STAGE1_OK.txt" "$input" "$model" "$calibration" "$bundle" "$profile"; do
     if [ ! -e "$path" ]; then
       echo "E9_STATUS=STOP_MISSING_REQUIRED_PATH path=$path"
@@ -92,6 +98,7 @@ main() {
   exec > >(tee -a "$root/E9_HARNESS.log") 2>&1
   echo "E9_HARNESS_ROOT=$root"
   echo "E9_CONTRACT=exact_stage1_payload;all_stage2_outputs;serial_refiner;no_candidate_stage1_artifacts"
+  echo "E9_STAGE1_CONFIG=use_cuda_graph=0;resume=0;score_atol=0;both_arms"
 
   package_failure() {
     if [ -s "$root/summaries/E9_RESULT.json" ]; then return; fi
@@ -219,29 +226,13 @@ main() {
     return 1
   }
   launch_control_stage1() {
-    local label expected only_gid control_stamp prior_root
+    local label expected only_gid control_stamp
     label=$1; expected=$2; only_gid=$3
     control_stamp=$(date -u +%Y%m%dT%H%M%SZ)
-    if [ "$label" = e9_control_full30 ] && [ -n "$full30_control_stamp" ]; then
-      if [[ ! "$full30_control_stamp" =~ ^[0-9]{8}T[0-9]{6}Z$ ]]; then
-        echo "E9_STATUS=STOP_INVALID_CONTROL_STAMP" >&2
-        return 1
-      fi
-      prior_root="$outputs/poleline_voxel_run_session_groups/v4_production/stage1_opt2_experiments/${full30_control_stamp}_e9_control_full30"
-      if [ ! -s "$prior_root/RUN_INFO.txt" ] \
-        || ! grep -qx 'variant_name=e9_control_full30' "$prior_root/RUN_INFO.txt" \
-        || ! grep -qx 'model_sha256=1b8b20c0bb2b52a1617555ed72c34311ba3839effd674bb2cac5273040d909ee' "$prior_root/RUN_INFO.txt" \
-        || ! grep -qx 'calibration_sha256=dea4829143f33d1f674176185ecd59df620c50a70488a83b0a2d6e17b81784e1' "$prior_root/RUN_INFO.txt"; then
-        echo "E9_STATUS=STOP_CONTROL_RESUME_SOURCE_MISSING root=$prior_root" >&2
-        return 1
-      fi
-      control_stamp=$full30_control_stamp
-      echo "E9_RESUMING_FULL30_STAGE1_CONTROL=$prior_root" >&2
-    fi
     RUN_STAMP="$control_stamp" VARIANT_NAME="$label" EXPECTED_SESSIONS="$expected" ONLY_GROUP_ID="$only_gid" IMAGE="$image" \
-    DETAILED_CUDA_TIMING=0 RETAIN_GATHER_HOST_BUFFERS=1 CACHE_REFERENCE_COORDINATE_CHANNELS=1 USE_CUDA_GRAPH=1 \
+    DETAILED_CUDA_TIMING=0 RETAIN_GATHER_HOST_BUFFERS=1 CACHE_REFERENCE_COORDINATE_CHANNELS=1 USE_CUDA_GRAPH=0 \
     PREFETCH_INPUTS=0 PREPARE_CORE_SCHEDULE=0 PREFETCH_WORKERS=1 PREFETCH_DEPTH=1 ASYNC_OUTPUT_WRITES=0 \
-    GROUPNORM_INPUT_LAYOUT=0 CONV_INPUT_LAYOUT=0 CHANNELS_LAST_WEIGHTS=0 KERNEL_FACTORY_INPUT_PACK=0 SCORE_ATOL=0 RESUME=1 \
+    GROUPNORM_INPUT_LAYOUT=0 CONV_INPUT_LAYOUT=0 CHANNELS_LAST_WEIGHTS=0 KERNEL_FACTORY_INPUT_PACK=0 SCORE_ATOL=0 RESUME=0 \
       bash "$s1_ops/launch_v4_stage1_opt2_experiment.sh" >&2 || return
     wait_stage1_driver "$label"
   }
@@ -297,7 +288,7 @@ main() {
           --model_path "$mc" --calibration_json "$cc" --timing_csv "/tmp/e9-stage1-$sid.csv" --progress_json "$progressc" \
           --batch_size 12 --amp bf16 --compile_model 0 --compile_mode default --channels_last 1 --pinned_d2h 0 \
           --detailed_cuda_timing 0 --retain_gather_host_buffers 1 --precompute_batch_gather_plans 0 \
-          --cache_coordinate_channels 0 --cache_reference_coordinate_channels 1 --use_cuda_graph 1 \
+          --cache_coordinate_channels 0 --cache_reference_coordinate_channels 1 --use_cuda_graph 0 \
           --prefetch_inputs 0 --prefetch_depth 1 --prefetch_workers 1 --prepare_core_schedule 0 --async_output_writes 0 \
           --groupnorm_input_layout 0 --conv_input_layout 0 --channels_last_weights 0 --kernel_factory_input_pack 0 \
           --prune_embedding_head 0 --warmup_iterations 0 --evaluate_all_cores 0 --gpu_coord_channels 1 --fixed_batch_shape 1 --resume 0 \
