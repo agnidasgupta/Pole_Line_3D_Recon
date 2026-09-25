@@ -1,7 +1,7 @@
 # E9: direct Stage-1 to Stage-2 handoff
 
-**Update date: 2026-09-24 UTC**
-**Status: planned; no performance result is recorded until the automated full-30 gate completes.**
+**Updated: 2026-09-25 UTC. Current decision: NOT ACCEPTED.**
+The full-30 in-memory candidate remains incomplete; see [E9 results](../../experiments/v4_stage12_inmemory_handoff_e9/RESULTS.md).
 
 E9 changes only the handoff transport. The accepted E7 Stage-1 inference core,
 checkpoint, calibration, BF16 batch-12 configuration, scores, labels and
@@ -58,3 +58,48 @@ The original control runs with `RESUME=1` and must still pass all 30 accepted
 sessions and the production-equivalence marker. The representative pairs run
 again under the fresh E9 harness. `--self-test` now also checks the shell
 watchdog's progress-file timestamp probe.
+
+## 2026-09-25 Stage-1 reproducibility gate
+
+The saved-control diagnostic compared all 157 Stage-1 payloads in the affected
+session. One accepted probe and one E9 control matched production exactly.
+The failed r2 and full-30 controls each changed 259,293 pole-score values,
+301,220 line-score values, and 76,967 objectness values. Eight predicted
+labels changed on six slices: two production positives were lost, one switched
+class, and five were newly predicted (unverified, not ground-truth false
+positives). The exact-score and prediction contract fails. No full-30 E9
+latency gain can be claimed. Details and the raw comparison are in the
+[dated result](../../experiments/v4_stage12_inmemory_handoff_e9/RESULTS.md).
+
+Run a fresh representative isolation before E9 again. The isolation compares
+CUDA Graph off and on twice with the same checkpoint, calibration, BF16 batch
+12, channels-last layout, full heads, thresholds, and all other E7 flags. It
+sets `RESUME=0` so each control is fresh; it does not alter V4 production.
+Use the committed script on an isolated worktree at Nebius:
+
+```bash
+REPO=/workspace/voxel_poleline/Pole_Line_3D_Recon_v4_stage2_stage1_electrical_v10
+git -C "$REPO" fetch github v4-stage12-inmemory-handoff-e9
+E9_WORKTREE="/workspace/voxel_poleline/Pole_Line_3D_Recon_e9_isolation_$(date -u +%Y%m%dT%H%M%SZ)"
+git -C "$REPO" worktree add --detach "$E9_WORKTREE" FETCH_HEAD
+printf '%s\n' "$E9_WORKTREE" > /home/agni/LATEST_E9_ISOLATION_WORKTREE.txt
+LOG=/home/agni/e9_stage1_isolation.log
+nohup env REPO="$E9_WORKTREE" bash "$E9_WORKTREE/ops/v4_stage12_inmemory_handoff_e9/run_e9_stage1_isolation.sh" --run > "$LOG" 2>&1 < /dev/null &
+```
+
+Monitor without host Python, including after reconnecting:
+
+```bash
+E9_WORKTREE=$(cat /home/agni/LATEST_E9_ISOLATION_WORKTREE.txt)
+REPO="$E9_WORKTREE" bash "$E9_WORKTREE/ops/v4_stage12_inmemory_handoff_e9/run_e9_stage1_isolation.sh" --monitor
+```
+
+After `STATE=ALL_FOUR_EXACT` or `STATE=STAGE1_REPRO_FAILURE`, download only
+the small archive named `UPLOAD_ARCHIVE` in the launch log. It contains the
+four exact-payload JSON reports, run configuration, source/asset hashes and
+logs; it contains no model or NPZ files. Review the four controls before
+selecting the same exact inference mode for both E9 arms. Graph-on previously
+failed, so two new Graph-on passes do not clear that history. Only if both
+fresh Graph-off controls match production should Graph-off be tried in both
+arms of a new E9 validation run; all full-30 Stage-1, Stage-2, and timing
+checks still apply. No full-30 run starts automatically.
