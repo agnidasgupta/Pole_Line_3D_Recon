@@ -1,8 +1,9 @@
 # E9 Stage 1 → Stage 2 in-memory handoff: current result
 
-**Updated: 2026-09-25 UTC. Decision: NOT ACCEPTED.** The E9 full-30 candidate
-has not run to completion. There is no measured E9 speedup and no Stage-2
-equivalence result for a completed 30-session candidate.
+**Updated: 2026-09-25 UTC. Decision: NOT ACCEPTED for performance.** The
+30-session E9 run completed: Stage 1 was exact on 3,738/3,738 slices and all
+32 Stage-2 output comparisons passed. Its measured combined mean was 2.619%
+slower than the disk control, below the required 1% saving.
 
 E9 changes handoff transport: the candidate passes the Stage-1 payload to
 Stage 2 in memory and writes the usual Stage-2 outputs. The control writes
@@ -42,13 +43,12 @@ CUDA Graph root cause.
 inventory, all aggregate counts, up to 30 per-slice examples, and errors.
 It contains no model weights or NPZ payloads.
 
-## Timing and reconstruction status
+## Earlier attempts
 
-The two earlier representative Stage-2 output comparisons reported **1,731
-files each and zero differences**. They do not substitute for a completed
-full-30 comparison. The watchdog interruption on the first full-30 attempt
-and the later exact-score control failures blocked E9 before a valid timing
-summary. A synthetic self-test percentage is not a measured E9 gain.
+The first full-30 attempt stopped under a watchdog, and two earlier Stage-1
+controls failed exact prediction checks. The self-test's illustrative
+`+4.348%` is not a measured result. A later fresh run completed and is
+reported below; the earlier failed controls remain relevant to reproducibility.
 
 ## Fresh Stage-1 isolation (2026-09-25 UTC)
 
@@ -76,13 +76,52 @@ did not run Stage 2 or the complete 30-session candidate.
 [Machine-readable isolation results](results/E9_STAGE1_ISOLATION_20260925.json)
 include all four per-run score and label counts without model or NPZ files.
 
-The next experimental controller uses **CUDA Graph off and `RESUME=0` for both
-Stage-1 arms**, so the disk control and in-memory candidate are compared under
-the same fresh-run configuration. It refuses `E9_FULL30_CONTROL_STAMP` to
-prevent reuse of a previous, potentially non-equivalent control. These are
-execution settings only; the accepted checkpoint, calibration, scores,
-thresholds, and reconstruction rules are unchanged. The 30-session run must
-still pass its per-session exact Stage-1 payload, Stage-2 output, coverage,
-and timing gates before E9 can be accepted.
+## Completed 30-session E9 result (2026-09-25 UTC)
 
-**Current decision: NOT ACCEPTED.** No valid full-30 E9 speedup is available.
+| Measure | Disk control | In-memory candidate | Result |
+| --- | ---: | ---: | --- |
+| Sessions / slices | 30 / 3,738 | 30 / 3,738 | Complete coverage |
+| Stage-1 payload checks | — | 3,738/3,738 exact | PASS |
+| Stage-2 output comparisons | — | 32/32 PASS | 44,700 compared file checks, zero differences; 41,238 in the full-30 set |
+| Timed slices | 3,708 | 3,708 | First slice of each session excluded |
+| Combined mean per slice | 2,244.981 ms | 2,303.783 ms | Candidate +58.802 ms; **2.619% slower** |
+| Combined P50 | 979.609 ms | 992.216 ms | Candidate +12.606 ms |
+| Combined P95 | 8,643.970 ms | 8,847.415 ms | Candidate +203.444 ms |
+
+Stage-2 CSVs were compared byte-for-byte; manifest and JSON comparisons
+normalize only location-specific handoff paths. No reconstruction differences
+were found.
+
+The disk control's mean Stage-1 artifact write was **10.115 ms**, manifest
+write **9.247 ms**, and Stage-2 artifact load **4.584 ms**. Their sum is
+**23.947 ms**, about **1.07%** of the control's 2,244.981 ms combined mean.
+Stage-2 reconstruction dominated: the control measured **1,977.044 ms** and
+the candidate **2,025.778 ms** (+48.734 ms). The respective Stage-2 enclosing
+wall times were **2,028.061 ms** and **2,109.040 ms** (+80.979 ms); the
+non-reconstruction portion of that envelope increased by about **32.245 ms**.
+The heavy Stage-2 work and wrapper overhead outweighed the small removable
+file I/O. Paired slice comparisons were slower on 68.9% of the 3,708 timed
+slices; 24 of the 29 sessions with timed slices were slower. One single-slice
+session has no timed slice after first-slice exclusion.
+
+The Stage-2 algorithm and output files were unchanged by the handoff, so the
++48.734 ms process-time difference is an observed runtime difference, not
+evidence of a new reconstruction rule. It may include run-order and CPU-load
+variation. The wrapper also calls the Stage-2 driver for each slice and uses a
+temporary manifest. The reported candidate combined metric omits its separate
+per-slice production-NPZ exactness check and its later Stage-1 manifest write;
+therefore it is **not a complete physical end-to-end wall clock** and cannot
+be treated as a clean measurement of file I/O alone. Even with this favorable
+accounting, it did not improve the combined time.
+
+[Raw numeric summary](results/E9_RESULT_20260925.json) and
+[rendered timing report](results/E9_RESULT_20260925.md) retain the control
+and candidate means, P50/P95 values, all measured component breakdowns,
+coverage, and the acceptance decision. No model or Stage-1 NPZ files are
+published here.
+
+**Decision: NOT ACCEPTED for speed.** Output equivalence passed. A future
+transport-only experiment should keep one Stage-2 processor alive per session,
+feed the exact Stage-1 arrays directly to its existing computation and writer,
+and time the same boundaries in both arms. Run exact-output checks outside
+the timed region and retain the full 30-session gate.
