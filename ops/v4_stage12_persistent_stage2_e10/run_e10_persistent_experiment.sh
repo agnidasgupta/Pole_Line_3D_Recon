@@ -77,26 +77,30 @@ main() {
   # control could preserve an earlier, non-equivalent Stage-1 payload.
   if [ -n "$full30_control_stamp" ]; then
     echo 'E10_STATUS=STOP_PRIOR_FULL30_CONTROL_DISALLOWED; start a fresh run without E10_FULL30_CONTROL_STAMP'
-    return
+    return 1
   fi
   for path in "$repo/.git" "$s1_ops/run_v4_stage1_opt2.py" "$s2_ops/run_v4_stage2_stage1_electrical_tracks.py" "$e10_ops/run_e10_stage12_persistent.py" "$baseline/PHASE1_STAGE1_OK.txt" "$input" "$model" "$calibration" "$bundle" "$profile"; do
     if [ ! -e "$path" ]; then
       echo "E10_STATUS=STOP_MISSING_REQUIRED_PATH path=$path"
-      return
+      return 1
     fi
   done
   for asset in \
     "$model:1b8b20c0bb2b52a1617555ed72c34311ba3839effd674bb2cac5273040d909ee" \
     "$calibration:dea4829143f33d1f674176185ecd59df620c50a70488a83b0a2d6e17b81784e1" \
     "$bundle:c451d501c3a3ccf7598ce8254d4807483afe3f41e4500be8a9abcf705843e72d" \
-    "$profile:de79c637e10d70ff0d39c2765b8b6514f08a8547374079cd1f9f803cb9879ca1d"; do
+    "$profile:de79c637e9d70ff0d39c2765b8b6514f08a8547374079cd1f9f803cb9879ca1d"; do
     asset_path=${asset%:*}; required_sha=${asset##*:}
     actual_sha=$(sha256sum "$asset_path" | awk '{print $1}')
     if [ "$actual_sha" != "$required_sha" ]; then
       echo "E10_STATUS=STOP_ASSET_SHA_MISMATCH path=$asset_path expected=$required_sha actual=$actual_sha"
-      return
+      return 1
     fi
   done
+  if [ "$mode" = --preflight ]; then
+    echo 'E10_PREFLIGHT_OK assets_and_paths_match'
+    return 0
+  fi
 
   stamp=${E10_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
   root="$outputs/v4_stage12_persistent_stage2_e10/$stamp"
