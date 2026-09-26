@@ -1,0 +1,190 @@
+{
+  "candidate_components": {
+    "csv_read_ms": {
+      "count": 312,
+      "mean_ms": 45.11149687485345,
+      "p50_ms": 32.97105100136832,
+      "p95_ms": 92.3687869002606
+    },
+    "e11_candidate_audit_json_write_ms": {
+      "count": 312,
+      "mean_ms": 0.19885172442184576,
+      "p50_ms": 0.19634450291050595,
+      "p95_ms": 0.2177268514060415
+    },
+    "e11_candidate_audit_output_write_ms": {
+      "count": 312,
+      "mean_ms": 21.202398548363515,
+      "p50_ms": 15.200023000943474,
+      "p95_ms": 45.78136455420463
+    },
+    "e11_candidate_manifest_update_ms": {
+      "count": 312,
+      "mean_ms": 10.097061685953053,
+      "p50_ms": 9.793265999178402,
+      "p95_ms": 13.748284051325752
+    },
+    "e11_candidate_payload_materialization_ms": {
+      "count": 312,
+      "mean_ms": 3.430719775865444,
+      "p50_ms": 2.156450504116947,
+      "p95_ms": 6.684085199231049
+    },
+    "e11_candidate_primary_output_write_ms": {
+      "count": 312,
+      "mean_ms": 4.998181830113679,
+      "p50_ms": 4.6861760019965,
+      "p95_ms": 6.7807902491040295
+    },
+    "e11_candidate_process_ms": {
+      "count": 312,
+      "mean_ms": 1365.3661334005265,
+      "p50_ms": 698.4777535035391,
+      "p95_ms": 3657.911201552269
+    },
+    "e11_candidate_timing_row_write_ms": {
+      "count": 312,
+      "mean_ms": 4.122518903736468,
+      "p50_ms": 4.118286000448279,
+      "p95_ms": 4.917009600831079
+    },
+    "e11_candidate_total_ms": {
+      "count": 312,
+      "mean_ms": 1409.506393419785,
+      "p50_ms": 737.0359400010784,
+      "p95_ms": 3724.851588397359
+    },
+    "e11_candidate_total_with_stage1_ms": {
+      "count": 312,
+      "mean_ms": 1557.6676889933458,
+      "p50_ms": 881.1061414999131,
+      "p95_ms": 3871.655801698943
+    },
+    "e11_candidate_unattributed_ms": {
+      "count": 312,
+      "mean_ms": 0.09052755080446304,
+      "p50_ms": 0.0889305047166999,
+      "p95_ms": 0.10356425118516199
+    },
+    "sparse_item_prep_ms": {
+      "count": 312,
+      "mean_ms": 14.171202464706603,
+      "p50_ms": 10.297161497874185,
+      "p95_ms": 32.31078684839303
+    },
+    "stage1_inference_ms": {
+      "count": 312,
+      "mean_ms": 83.13217592622561,
+      "p50_ms": 80.82961800027988,
+      "p95_ms": 118.76960385197889
+    },
+    "stage1_manifest_write_ms": {
+      "count": 312,
+      "mean_ms": 5.746420307775388,
+      "p50_ms": 5.7225060008931905,
+      "p95_ms": 7.462983500590781
+    }
+  },
+  "control_components": {
+    "csv_read_ms": {
+      "count": 312,
+      "mean_ms": 42.21990447767428,
+      "p50_ms": 33.34629200253403,
+      "p95_ms": 88.95968434990209
+    },
+    "e11_disk_artifact_load_ms": {
+      "count": 312,
+      "mean_ms": 3.409562923013418,
+      "p50_ms": 2.87914300133707,
+      "p95_ms": 5.7918408459954644
+    },
+    "e11_disk_audit_json_write_ms": {
+      "count": 312,
+      "mean_ms": 0.205692493531947,
+      "p50_ms": 0.20338049944257358,
+      "p95_ms": 0.22481479754787864
+    },
+    "e11_disk_audit_output_write_ms": {
+      "count": 312,
+      "mean_ms": 14.20751882720558,
+      "p50_ms": 10.602692989778006,
+      "p95_ms": 28.8816656502604
+    },
+    "e11_disk_manifest_update_ms": {
+      "count": 312,
+      "mean_ms": 10.306752371760899,
+      "p50_ms": 10.372649998316774,
+      "p95_ms": 14.409524801158113
+    },
+    "e11_disk_primary_output_write_ms": {
+      "count": 312,
+      "mean_ms": 4.054007967543163,
+      "p50_ms": 3.872026994940825,
+      "p95_ms": 5.491692398572923
+    },
+    "e11_disk_process_ms": {
+      "count": 312,
+      "mean_ms": 1294.1988742820681,
+      "p50_ms": 673.5065235006914,
+      "p95_ms": 3350.5479181494593
+    },
+    "e11_disk_total_ms": {
+      "count": 312,
+      "mean_ms": 1333.6441417981032,
+      "p50_ms": 703.9110824989621,
+      "p95_ms": 3409.656590998202
+    },
+    "e11_disk_total_with_stage1_ms": {
+      "count": 312,
+      "mean_ms": 1486.9250584128727,
+      "p50_ms": 854.3326969993359,
+      "p95_ms": 3609.931372143182
+    },
+    "e11_disk_unattributed_ms": {
+      "count": 312,
+      "mean_ms": 1.8125364232708727,
+      "p50_ms": 0.5244720123300795,
+      "p95_ms": 8.086286253455908
+    },
+    "sparse_item_prep_ms": {
+      "count": 312,
+      "mean_ms": 13.98109529157246,
+      "p50_ms": 10.2952794986777,
+      "p95_ms": 30.877762698219154
+    },
+    "stage1_artifact_write_ms": {
+      "count": 312,
+      "mean_ms": 7.98070857038114,
+      "p50_ms": 6.938068501767702,
+      "p95_ms": 12.964426551116047
+    },
+    "stage1_manifest_write_ms": {
+      "count": 312,
+      "mean_ms": 6.378656567227527,
+      "p50_ms": 6.37196249954286,
+      "p95_ms": 8.267749000515323
+    },
+    "stage1_wall_ms": {
+      "count": 312,
+      "mean_ms": 82.72055170791413,
+      "p50_ms": 80.34260099884705,
+      "p95_ms": 118.42020339972802
+    }
+  },
+  "decision": "STOP_NO_CREDIBLE_FULL30_GAIN",
+  "experiment": "E11_stage12_timing_decomposition",
+  "interpretation": "Exactness diagnostics are outside timed callback totals. E11 is a representative paired decomposition only; it never starts or approves a full-30 run.",
+  "observed": {
+    "candidate_end_to_end_mean_ms": 1557.6676889933458,
+    "candidate_stage2_callback_mean_ms": 1409.506393419785,
+    "control_end_to_end_mean_ms": 1486.9250584128727,
+    "control_stage2_callback_mean_ms": 1333.6441417981032,
+    "saved_percent": -4.757646001069014,
+    "timed_rows": 312
+  },
+  "quality": {
+    "stage1_exact": true,
+    "stage2_comparisons": 2,
+    "stage2_comparisons_pass": true
+  }
+}
