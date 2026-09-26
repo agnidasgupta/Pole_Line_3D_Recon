@@ -39,6 +39,22 @@ main() {
     echo E11_SELF_TEST_OK
     return
   fi
+  if [ "$mode" = --finalize-existing ]; then
+    root=${2:?usage: --finalize-existing /workspace/voxel_poleline/outputs/v4_stage12_timing_decomposition_e11/<stamp>}
+    [ -d "$root/timings/control_stage1" ] && [ -d "$root/timings/control_stage2" ] && [ -d "$root/timings/candidate" ] && [ -d "$root/comparisons" ] || { echo 'E11_STATUS=STOP_FINALIZE_INPUT_MISSING'; return 1; }
+    host_to_container() { case "$1" in "$outputs"/*) printf '/outputs/%s' "${1#"$outputs"/}" ;; *) printf '%s' "$1" ;; esac; }
+    c1=$(host_to_container "$root/timings/control_stage1"); c2=$(host_to_container "$root/timings/control_stage2"); cand=$(host_to_container "$root/timings/candidate"); comp=$(host_to_container "$root/comparisons"); outj=$(host_to_container "$root/summaries/E11_RESULT.json"); outm=$(host_to_container "$root/summaries/E11_RESULT.md")
+    mkdir -p "$root/summaries"
+    docker run --rm --mount "type=bind,source=$e11_ops,target=/workspace/e11,readonly" --mount "type=bind,source=$outputs,target=/outputs" --workdir /workspace/e11 -e PYTHONPATH=/workspace/e11 "$image" python /workspace/e11/summarize_e11_timing_decomposition.py --control-stage1 "$c1" --control "$c2" --candidate "$cand" --comparisons "$comp" --json "$outj" --markdown "$outm" || { printf '%s\n' 'E11_STATUS=STOP_SUMMARY_FAILED' > "$root/STATE.txt"; return 1; }
+    decision=$(sed -n 's/^[[:space:]]*"decision": "\([^"]*\)".*/\1/p' "$root/summaries/E11_RESULT.json")
+    printf '%s\n' "E11_STATUS=$decision" > "$root/STATE.txt"
+    archive="/home/agni/v4_stage12_e11_$(basename "$root").tar.gz"
+    tar -czf "$archive" -C "$root" STATE.txt E11_HARNESS.log summaries comparisons diagnostics timings logs
+    sha256sum "$archive" > "$archive.sha256"
+    printf '%s\n' "$archive" > /home/agni/LATEST_V4_STAGE12_E11_RESULT_ARCHIVE.txt
+    echo "E11_RESULT_ARCHIVE=$archive"; echo "E11_DECISION=$decision"
+    return
+  fi
   for path in "$repo/.git" "$s1_ops/run_v4_stage1_opt2.py" "$s2_ops/run_v4_stage2_stage1_electrical_tracks.py" "$e11_ops/run_e11_stage12_profile.py" "$baseline/PHASE1_STAGE1_OK.txt" "$input" "$model" "$calibration" "$bundle" "$profile"; do
     if [ ! -e "$path" ]; then echo "E11_STATUS=STOP_MISSING_REQUIRED_PATH path=$path"; return 1; fi
   done

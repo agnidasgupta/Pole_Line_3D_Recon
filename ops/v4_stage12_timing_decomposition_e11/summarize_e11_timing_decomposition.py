@@ -18,12 +18,16 @@ def read_rows(root: Path) -> pd.DataFrame:
         except Exception:
             continue
         if {"group_id", "slice_seq"} <= set(frame.columns):
+            # Each representative repeat contains the same group_id/slice_seq
+            # sequence.  The copied timing filename is its durable repeat key.
+            frame = frame.copy()
+            frame["e11_repeat_id"] = path.stem
             frames.append(frame)
     if not frames:
         raise RuntimeError(f"No E11 timing rows under {root}")
     out = pd.concat(frames, ignore_index=True)
     out["slice_seq"] = pd.to_numeric(out["slice_seq"], errors="raise").astype(int)
-    if out.duplicated(["group_id", "slice_seq"]).any():
+    if out.duplicated(["e11_repeat_id", "group_id", "slice_seq"]).any():
         raise RuntimeError(f"Duplicate E11 timing keys under {root}")
     return out.sort_values(["group_id", "slice_seq"], kind="stable")
 
@@ -47,13 +51,13 @@ def main() -> None:
     args = p.parse_args()
     control_stage1 = read_rows(Path(args.control_stage1))
     control, candidate = read_rows(Path(args.control)), read_rows(Path(args.candidate))
-    keys = ["group_id", "slice_seq"]
+    keys = ["e11_repeat_id", "group_id", "slice_seq"]
     control = control_stage1.merge(control, on=keys, suffixes=("_stage1", "_stage2"), validate="one_to_one")
     if set(map(tuple, control[keys].itertuples(index=False, name=None))) != set(map(tuple, candidate[keys].itertuples(index=False, name=None))):
         raise RuntimeError("E11 control/candidate coverage differs")
     # Exclude warm-up slice per representative run, matching E9/E10 policy.
-    control = control.loc[control.groupby("group_id").cumcount().gt(0)].copy()
-    candidate = candidate.loc[candidate.groupby("group_id").cumcount().gt(0)].copy()
+    control = control.loc[control.groupby(["e11_repeat_id", "group_id"]).cumcount().gt(0)].copy()
+    candidate = candidate.loc[candidate.groupby(["e11_repeat_id", "group_id"]).cumcount().gt(0)].copy()
     reports = [json.loads(path.read_text()) for path in sorted(Path(args.comparisons).glob("*.json"))]
     comparisons_ok = len(reports) == args.expected_repeats and all(r.get("status") == "PASS" for r in reports)
     exact_ok = int(pd.to_numeric(candidate.get("stage1_exact"), errors="coerce").fillna(0).sum()) == len(candidate)
