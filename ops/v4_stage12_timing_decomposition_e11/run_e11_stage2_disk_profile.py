@@ -6,7 +6,37 @@ import time
 from typing import Any
 
 import run_v4_stage2_stage1_electrical_tracks as stage2
-from run_e9_stage12_inmemory import pin_refiner_workers
+
+
+def pin_refiner_workers(root: Any) -> int:
+    """Pin only the loaded Stage-2 refiners; avoid importing Stage-1/E9 here."""
+    visited: set[int] = set()
+    changed = 0
+
+    def walk(obj: Any, depth: int = 0) -> None:
+        nonlocal changed
+        if obj is None or depth > 6 or id(obj) in visited:
+            return
+        visited.add(id(obj))
+        if hasattr(obj, "n_jobs"):
+            try:
+                if getattr(obj, "n_jobs") != 1:
+                    setattr(obj, "n_jobs", 1)
+                    changed += 1
+            except Exception:
+                pass
+        if isinstance(obj, dict):
+            for value in obj.values():
+                walk(value, depth + 1)
+        elif isinstance(obj, (list, tuple)):
+            for value in obj:
+                walk(value, depth + 1)
+        elif hasattr(obj, "__dict__") and obj.__class__.__module__.split(".")[0] not in {"numpy", "pandas", "torch"}:
+            for value in vars(obj).values():
+                walk(value, depth + 1)
+
+    walk(root)
+    return changed
 
 
 def main() -> None:
